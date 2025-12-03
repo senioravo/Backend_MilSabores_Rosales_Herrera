@@ -1,0 +1,495 @@
+{
+  "info": {
+    "name": "Mil Sabores API - EC2",
+    "description": "Colección completa de endpoints para microservicios Mil Sabores desplegados en AWS EC2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://100.30.4.167",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Usuario Service",
+      "item": [
+        {
+          "name": "Registrar Usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Juan Pérez\",\n  \"email\": \"juan.perez@example.com\",\n  \"password\": \"password123\",\n  \"telefono\": \"+56912345678\",\n  \"direccion\": \"Av. Principal 123, Santiago\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}:8081/api/usuarios/register",
+              "host": ["{{base_url}}"],
+              "port": "8081",
+              "path": ["api", "usuarios", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"user_id\", jsonData.id);",
+                  "    pm.collectionVariables.set(\"auth_token\", jsonData.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"juan.perez@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}:8081/api/usuarios/login",
+              "host": ["{{base_url}}"],
+              "port": "8081",
+              "path": ["api", "usuarios", "login"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Todos los Usuarios",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8081/api/usuarios",
+              "host": ["{{base_url}}"],
+              "port": "8081",
+              "path": ["api", "usuarios"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Usuario por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8081/api/usuarios/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "port": "8081",
+              "path": ["api", "usuarios", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Actualizar Usuario Parcial (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"telefono\": \"+56987654321\",\n  \"direccion\": \"Nueva Dirección 456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}:8081/api/usuarios/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "port": "8081",
+              "path": ["api", "usuarios", "{{user_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Producto Service",
+      "item": [
+        {
+          "name": "Obtener Productos con Paginación",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8082/api/productos?page=0&size=10",
+              "host": ["{{base_url}}"],
+              "port": "8082",
+              "path": ["api", "productos"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filtrar Productos (Completo)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8082/api/productos?page=0&size=5&categoriaId=tortas&minPrecio=10000&maxPrecio=30000&sortBy=precio&sortDir=asc",
+              "host": ["{{base_url}}"],
+              "port": "8082",
+              "path": ["api", "productos"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "5"
+                },
+                {
+                  "key": "categoriaId",
+                  "value": "tortas"
+                },
+                {
+                  "key": "minPrecio",
+                  "value": "10000"
+                },
+                {
+                  "key": "maxPrecio",
+                  "value": "30000"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "precio"
+                },
+                {
+                  "key": "sortDir",
+                  "value": "asc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Obtener Producto por Código",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8082/api/productos/PROD-001",
+              "host": ["{{base_url}}"],
+              "port": "8082",
+              "path": ["api", "productos", "PROD-001"]
+            }
+          }
+        },
+        {
+          "name": "Productos Destacados",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8082/api/productos/destacados?limit=5",
+              "host": ["{{base_url}}"],
+              "port": "8082",
+              "path": ["api", "productos", "destacados"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar Productos por Nombre",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8082/api/productos/buscar?nombre=chocolate",
+              "host": ["{{base_url}}"],
+              "port": "8082",
+              "path": ["api", "productos", "buscar"],
+              "query": [
+                {
+                  "key": "nombre",
+                  "value": "chocolate"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reducir Stock al Vender",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}:8082/api/productos/PROD-001/reducir-stock?cantidad=2",
+              "host": ["{{base_url}}"],
+              "port": "8082",
+              "path": ["api", "productos", "PROD-001", "reducir-stock"],
+              "query": [
+                {
+                  "key": "cantidad",
+                  "value": "2"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Carrito Service",
+      "item": [
+        {
+          "name": "Obtener Carrito de Usuario",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8083/api/carritos/usuario/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "port": "8083",
+              "path": ["api", "carritos", "usuario", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Agregar Item al Carrito",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": {{user_id}},\n  \"productoCode\": \"PROD-001\",\n  \"cantidad\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}:8083/api/carritos/agregar",
+              "host": ["{{base_url}}"],
+              "port": "8083",
+              "path": ["api", "carritos", "agregar"]
+            }
+          }
+        },
+        {
+          "name": "Actualizar Cantidad de Item",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}:8083/api/carritos/item/1?cantidad=5",
+              "host": ["{{base_url}}"],
+              "port": "8083",
+              "path": ["api", "carritos", "item", "1"],
+              "query": [
+                {
+                  "key": "cantidad",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Eliminar Item del Carrito",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}:8083/api/carritos/item/1",
+              "host": ["{{base_url}}"],
+              "port": "8083",
+              "path": ["api", "carritos", "item", "1"]
+            }
+          }
+        },
+        {
+          "name": "Limpiar Carrito",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}:8083/api/carritos/usuario/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "port": "8083",
+              "path": ["api", "carritos", "usuario", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Total del Carrito",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8083/api/carritos/usuario/{{user_id}}/total",
+              "host": ["{{base_url}}"],
+              "port": "8083",
+              "path": ["api", "carritos", "usuario", "{{user_id}}", "total"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ventas Service",
+      "item": [
+        {
+          "name": "Crear Venta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": {{user_id}},\n  \"usuarioNombre\": \"Juan Pérez\",\n  \"usuarioEmail\": \"juan.perez@example.com\",\n  \"detalles\": [\n    {\n      \"productoCode\": \"PROD-001\",\n      \"productoNombre\": \"Torta de Chocolate\",\n      \"productoImagen\": \"/images/products/torta-chocolate.jpg\",\n      \"cantidad\": 2,\n      \"precioUnitario\": 15000,\n      \"subtotal\": 30000\n    },\n    {\n      \"productoCode\": \"PROD-005\",\n      \"productoNombre\": \"Pastel de Fresa\",\n      \"productoImagen\": \"/images/products/pastel-fresa.jpg\",\n      \"cantidad\": 1,\n      \"precioUnitario\": 12000,\n      \"subtotal\": 12000\n    }\n  ],\n  \"subtotal\": 42000,\n  \"iva\": 7980,\n  \"total\": 49980\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}:8084/api/ventas",
+              "host": ["{{base_url}}"],
+              "port": "8084",
+              "path": ["api", "ventas"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Venta por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8084/api/ventas/1",
+              "host": ["{{base_url}}"],
+              "port": "8084",
+              "path": ["api", "ventas", "1"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Ventas por Usuario",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8084/api/ventas/usuario/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "port": "8084",
+              "path": ["api", "ventas", "usuario", "{{user_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Obtener Ventas por Estado",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}:8084/api/ventas/estado/PENDIENTE",
+              "host": ["{{base_url}}"],
+              "port": "8084",
+              "path": ["api", "ventas", "estado", "PENDIENTE"]
+            }
+          }
+        },
+        {
+          "name": "Procesar Pago Transbank",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"transbank_token\", jsonData.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}:8084/api/ventas/1/pagar",
+              "host": ["{{base_url}}"],
+              "port": "8084",
+              "path": ["api", "ventas", "1", "pagar"]
+            }
+          }
+        },
+        {
+          "name": "Confirmar Pago Exitoso",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}:8084/api/ventas/1/confirmar-pago?token={{transbank_token}}&exitoso=true",
+              "host": ["{{base_url}}"],
+              "port": "8084",
+              "path": ["api", "ventas", "1", "confirmar-pago"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{transbank_token}}"
+                },
+                {
+                  "key": "exitoso",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Confirmar Pago Rechazado",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}:8084/api/ventas/1/confirmar-pago?token={{transbank_token}}&exitoso=false",
+              "host": ["{{base_url}}"],
+              "port": "8084",
+              "path": ["api", "ventas", "1", "confirmar-pago"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{transbank_token}}"
+                },
+                {
+                  "key": "exitoso",
+                  "value": "false"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
