@@ -1,29 +1,54 @@
 #!/bin/bash
-# Script para detener todos los microservicios
-# Ejecutar desde la carpeta BackendMilSabores
 
-echo "🛑 Deteniendo microservicios de Mil Sabores..."
+# Script para detener todos los microservicios de Mil Sabores en EC2
+# Autor: Alex Rosales Herrera
+# Fecha: Diciembre 2025
 
-# Función para detener un servicio
-stop_service() {
-    local service_name=$1
-    local pid_file="logs/$service_name.pid"
-    
-    if [ -f "$pid_file" ]; then
-        local pid=$(cat $pid_file)
-        echo "⏹️  Deteniendo $service_name (PID: $pid)..."
-        kill $pid 2>/dev/null
-        rm $pid_file
-        echo "✓ $service_name detenido"
-    else
-        echo "⚠️  No se encontró PID para $service_name"
-    fi
-}
-
-# Detener servicios
-stop_service "usuario-service"
-stop_service "producto-service"
-stop_service "carrito-service"
+echo "======================================"
+echo "Deteniendo Microservicios Mil Sabores"
+echo "======================================"
 
 echo ""
-echo "✨ Todos los servicios han sido detenidos"
+echo "Buscando procesos Java en ejecución..."
+ps aux | grep java | grep -v grep
+
+echo ""
+echo "Deteniendo usuario-service..."
+pkill -f usuario-service
+sleep 2
+
+echo "Deteniendo producto-service..."
+pkill -f producto-service
+sleep 2
+
+echo "Deteniendo carrito-service..."
+pkill -f carrito-service
+sleep 2
+
+echo "Deteniendo ventas-service..."
+pkill -f ventas-service
+sleep 2
+
+echo ""
+echo "======================================"
+echo "Verificando procesos restantes..."
+echo "======================================"
+REMAINING=$(ps aux | grep java | grep -v grep)
+
+if [ -z "$REMAINING" ]; then
+    echo "✓ Todos los servicios han sido detenidos correctamente"
+else
+    echo "⚠ Aún hay procesos Java en ejecución:"
+    echo "$REMAINING"
+    echo ""
+    echo "Para forzar la detención, ejecuta:"
+    echo "  killall -9 java"
+fi
+
+echo ""
+echo "======================================"
+echo "Verificando puertos liberados..."
+echo "======================================"
+sudo ss -tulpn | grep -E ':(8081|8082|8083|8084)' || echo "✓ Todos los puertos liberados (8081-8084)"
+
+echo ""
