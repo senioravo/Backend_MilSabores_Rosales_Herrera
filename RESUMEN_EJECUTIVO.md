@@ -1,4 +1,4 @@
-# 📋 Resumen Ejecutivo - Backend Mil Sabores
+sudo nano /etc/nginx/sites-available/milsabores# 📋 Resumen Ejecutivo - Backend Mil Sabores
 
 ## ✅ Trabajo Completado
 
