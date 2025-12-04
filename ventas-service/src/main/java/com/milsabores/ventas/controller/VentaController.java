@@ -19,7 +19,6 @@ import java.util.List;
 @RequestMapping("/api/ventas")
 @RequiredArgsConstructor
 @Tag(name = "Ventas", description = "API para gestión de ventas")
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:3000"})
 public class VentaController {
     
     private final VentaService ventaService;
