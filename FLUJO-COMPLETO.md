@@ -385,6 +385,7 @@ DELETE http://100.30.4.167:8083/api/carritos/item/1
 - **Orígenes permitidos:** `*` (cualquier origen para desarrollo)
 - **Métodos:** GET, POST, PUT, PATCH, DELETE, OPTIONS
 - **Headers:** Todos permitidos
+- **Configuración:** Global en application.properties (sin @CrossOrigin en controllers)
 
 ---
 
