@@ -12,9 +12,11 @@ public class TransbankResponseDTO {
     private boolean exitoso;
     private String mensaje;
     private String token;
+    private String url; // URL de redirección a Webpay
     private String ordenCompra;
-    private Integer monto;
+    private Double monto;
     private String codigoAutorizacion;
     private String numeroTarjeta;
     private String fechaTransaccion;
+    private Integer responseCode; // Código de respuesta de Transbank
 }
