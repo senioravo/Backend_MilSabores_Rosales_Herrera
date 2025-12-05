@@ -6,21 +6,28 @@ import com.milsabores.ventas.model.DetalleVenta;
 import com.milsabores.ventas.model.EstadoVenta;
 import com.milsabores.ventas.model.Venta;
 import com.milsabores.ventas.repository.VentaRepository;
+import com.milsabores.ventas.service.TransbankService;
 import com.milsabores.ventas.service.VentaService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class VentaServiceImpl implements VentaService {
     
     private final VentaRepository ventaRepository;
+    private final TransbankService transbankService;
+    
+    @Value("${transbank.return.url}")
+    private String transbankReturnUrl;
     
     @Override
     @Transactional
@@ -105,37 +112,46 @@ public class VentaServiceImpl implements VentaService {
         Venta venta = ventaRepository.findById(ventaId)
                 .orElseThrow(() -> new VentaNotFoundException("Venta no encontrada con ID: " + ventaId));
         
-        // Simular integración con Transbank
-        // En producción, aquí se haría la llamada real a la API de Transbank
-        String token = "TBK_" + UUID.randomUUID().toString();
-        String ordenCompra = "OC_" + ventaId + "_" + System.currentTimeMillis();
-        
-        venta.setTransbankToken(token);
-        venta.setTransbankOrderId(ordenCompra);
-        venta.setEstado(EstadoVenta.PROCESANDO);
-        venta.setFechaActualizacion(LocalDateTime.now());
-        
-        ventaRepository.save(venta);
-        
-        // Simular respuesta exitosa de Transbank (80% de éxito)
-        boolean exitoso = Math.random() < 0.8;
-        
-        TransbankResponseDTO response = new TransbankResponseDTO();
-        response.setExitoso(exitoso);
-        response.setToken(token);
-        response.setOrdenCompra(ordenCompra);
-        response.setMonto(venta.getTotal());
-        response.setFechaTransaccion(LocalDateTime.now().toString());
-        
-        if (exitoso) {
-            response.setMensaje("Transacción aprobada");
-            response.setCodigoAutorizacion("AUTH_" + (int)(Math.random() * 1000000));
-            response.setNumeroTarjeta("**** **** **** " + (int)(Math.random() * 10000));
-        } else {
-            response.setMensaje("Transacción rechazada - Fondos insuficientes");
+        try {
+            // Llamar a Transbank API real
+            log.info("Iniciando pago Transbank para venta ID: {}, monto: {}", ventaId, venta.getTotal());
+            
+            TransbankCreateResponseDTO tbkResponse = transbankService.crearTransaccion(
+                ventaId, 
+                venta.getTotal().doubleValue(), 
+                transbankReturnUrl
+            );
+            
+            // Guardar token en la venta
+            venta.setTransbankToken(tbkResponse.getToken());
+            venta.setEstado(EstadoVenta.PROCESANDO);
+            venta.setFechaActualizacion(LocalDateTime.now());
+            ventaRepository.save(venta);
+            
+            // Preparar respuesta para el frontend
+            TransbankResponseDTO response = new TransbankResponseDTO();
+            response.setExitoso(true);
+            response.setToken(tbkResponse.getToken());
+            response.setUrl(tbkResponse.getUrl()); // URL de Webpay para redirección
+            response.setOrdenCompra("OC_" + ventaId);
+            response.setMonto(venta.getTotal().doubleValue());
+            response.setFechaTransaccion(LocalDateTime.now().toString());
+            response.setMensaje("Transacción iniciada exitosamente. Redirigir a Webpay.");
+            
+            log.info("Transacción Transbank creada exitosamente para venta {}", ventaId);
+            return response;
+            
+        } catch (Exception e) {
+            log.error("Error al procesar pago con Transbank para venta {}", ventaId, e);
+            
+            venta.setEstado(EstadoVenta.RECHAZADA);
+            ventaRepository.save(venta);
+            
+            TransbankResponseDTO response = new TransbankResponseDTO();
+            response.setExitoso(false);
+            response.setMensaje("Error al procesar pago: " + e.getMessage());
+            return response;
         }
-        
-        return response;
     }
     
     @Override
@@ -144,9 +160,26 @@ public class VentaServiceImpl implements VentaService {
         Venta venta = ventaRepository.findById(ventaId)
                 .orElseThrow(() -> new VentaNotFoundException("Venta no encontrada con ID: " + ventaId));
         
-        if (exitoso) {
-            venta.setEstado(EstadoVenta.COMPLETADA);
-        } else {
+        try {
+            log.info("Confirmando pago con Transbank para venta {}, token: {}", ventaId, token);
+            
+            // Confirmar con Transbank
+            TransbankCommitResponseDTO tbkCommit = transbankService.confirmarTransaccion(token);
+            
+            // Verificar respuesta (responseCode = 0 significa aprobado)
+            if (tbkCommit.getResponseCode() == 0) {
+                venta.setEstado(EstadoVenta.COMPLETADA);
+                venta.setTransbankOrderId(tbkCommit.getBuyOrder());
+                log.info("Pago confirmado exitosamente para venta {}, código autorización: {}", 
+                    ventaId, tbkCommit.getAuthorizationCode());
+            } else {
+                venta.setEstado(EstadoVenta.RECHAZADA);
+                log.warn("Pago rechazado para venta {}: código de respuesta {}", 
+                    ventaId, tbkCommit.getResponseCode());
+            }
+            
+        } catch (Exception e) {
+            log.error("Error al confirmar pago para venta {}", ventaId, e);
             venta.setEstado(EstadoVenta.RECHAZADA);
         }
         

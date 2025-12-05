@@ -2,11 +2,14 @@ package com.milsabores.ventas.controller;
 
 import com.milsabores.ventas.dto.*;
 import com.milsabores.ventas.model.EstadoVenta;
+import com.milsabores.ventas.model.Venta;
+import com.milsabores.ventas.repository.VentaRepository;
 import com.milsabores.ventas.service.VentaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/ventas")
 @RequiredArgsConstructor
@@ -22,6 +26,7 @@ import java.util.List;
 public class VentaController {
     
     private final VentaService ventaService;
+    private final VentaRepository ventaRepository;
     
     @PostMapping
     @Operation(summary = "Crear una nueva venta")
@@ -98,5 +103,36 @@ public class VentaController {
     public ResponseEntity<Void> eliminarVenta(@PathVariable Long id) {
         ventaService.eliminarVenta(id);
         return ResponseEntity.noContent().build();
+    }
+    
+    @PostMapping("/transbank/return")
+    @Operation(summary = "Endpoint de retorno de Transbank después del pago")
+    public ResponseEntity<Void> handleTransbankReturn(@RequestParam("token_ws") String token) {
+        try {
+            log.info("Retorno de Transbank con token: {}", token);
+            
+            // Buscar venta por token
+            Venta venta = ventaRepository.findByTransbankToken(token)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada con token: " + token));
+            
+            // Confirmar pago con Transbank
+            VentaResponseDTO ventaConfirmada = ventaService.confirmarPago(venta.getId(), token, true);
+            
+            // Redirigir al frontend con resultado
+            String frontendUrl = "https://dsy-1104-rosales-herrera.vercel.app/checkout/result?ventaId=" 
+                + venta.getId() + "&status=" + ventaConfirmada.getEstado();
+            
+            log.info("Redirigiendo a frontend: {}", frontendUrl);
+            
+            return ResponseEntity.status(HttpStatus.FOUND)
+                .header("Location", frontendUrl)
+                .build();
+            
+        } catch (Exception e) {
+            log.error("Error en retorno de Transbank", e);
+            return ResponseEntity.status(HttpStatus.FOUND)
+                .header("Location", "https://dsy-1104-rosales-herrera.vercel.app/checkout/error")
+                .build();
+        }
     }
 }
