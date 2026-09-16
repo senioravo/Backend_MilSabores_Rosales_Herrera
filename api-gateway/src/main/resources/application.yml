@@ -52,6 +52,12 @@ server:
 jwt:
   secret: ${JWT_SECRET:milsabores-secret-key-2024-super-segura-para-produccion-cambiar}
 
+# Rate limiting en memoria (ver RateLimitingFilter) - una unica instancia de
+# gateway, sin Redis.
+rate-limit:
+  requests-per-window: ${RATE_LIMIT_REQUESTS:60}
+  window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+
 management:
   endpoints:
     web:
