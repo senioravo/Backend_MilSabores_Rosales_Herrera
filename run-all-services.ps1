@@ -1,5 +1,15 @@
 # Script para ejecutar todos los microservicios de Mil Sabores
 # PowerShell Script
+#
+# Uso rapido:
+#   .\run-all-services.ps1              -> build incremental (paralelo) + arranque
+#   .\run-all-services.ps1 -SkipBuild   -> no compila, solo (re)lanza los JARs ya construidos
+#   .\run-all-services.ps1 -Clean       -> fuerza "clean build" en los 6 proyectos
+
+param(
+    [switch]$SkipBuild,
+    [switch]$Clean
+)
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  Iniciando Microservicios Mil Sabores" -ForegroundColor Cyan
@@ -29,28 +39,65 @@ if ($javaVersion) {
     exit 1
 }
 
-Write-Host ""
-Write-Host "Construyendo proyectos con Gradle..." -ForegroundColor Yellow
-Write-Host ""
-
-# Cada servicio trae su propio wrapper (gradlew.bat + gradle-wrapper.jar), asi
-# que no depende de tener `gradle` instalado globalmente. El toolchain plugin
-# en settings.gradle descarga el JDK 17 solo si hace falta.
 $services = @("usuario-service", "producto-service", "carrito-service", "ventas-service", "api-gateway", "bff")
+$root = $PSScriptRoot
 
-foreach ($service in $services) {
-    Write-Host "Construyendo $service..." -ForegroundColor Cyan
-    Push-Location $service
+if ($SkipBuild) {
+    Write-Host ""
+    Write-Host "-SkipBuild: se omite la compilacion, se usan los JARs ya construidos." -ForegroundColor Yellow
+} else {
+    Write-Host ""
+    Write-Host "Construyendo los 6 proyectos en paralelo..." -ForegroundColor Yellow
+    Write-Host ""
 
-    .\gradlew.bat clean build -x test
+    # Cada servicio trae su propio wrapper (gradlew.bat + gradle-wrapper.jar) y
+    # corre en su propio proceso, asi que lanzar los 6 builds en paralelo con
+    # Start-Job es seguro (no comparten estado) y es varias veces mas rapido
+    # que compilarlos uno por uno. Sin -Clean se deja el build incremental de
+    # Gradle hacer su trabajo: si el codigo no cambio, cada proyecto compila
+    # en segundos en vez de desde cero.
+    $buildArgs = if ($Clean) { @("clean", "build", "-x", "test") } else { @("build", "-x", "test") }
 
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Falló la construcción de $service" -ForegroundColor Red
-        Pop-Location
+    $jobs = foreach ($service in $services) {
+        Start-Job -Name $service -ScriptBlock {
+            param($servicePath, $buildArgs)
+            Set-Location $servicePath
+            & .\gradlew.bat @buildArgs 2>&1 | Out-String -Stream | ForEach-Object { $_ }
+            [PSCustomObject]@{ Success = ($LASTEXITCODE -eq 0) }
+        } -ArgumentList (Join-Path $root $service), $buildArgs
+    }
+
+    Write-Host "Esperando a que terminen los 6 builds (timeout 10 min)..." -ForegroundColor Cyan
+    $jobs | Wait-Job -Timeout 600 | Out-Null
+
+    $failed = $false
+    foreach ($job in $jobs) {
+        if ($job.State -eq 'Running') {
+            Write-Host "ERROR: $($job.Name) no termino a tiempo (posible descarga lenta del JDK toolchain)" -ForegroundColor Red
+            $failed = $true
+            Stop-Job -Job $job
+            Remove-Job -Job $job -Force
+            continue
+        }
+
+        $output = Receive-Job -Job $job
+        $result = $output | Where-Object { $_ -is [PSCustomObject] -and $_.PSObject.Properties.Name -contains 'Success' } | Select-Object -Last 1
+
+        if ($result -and $result.Success) {
+            Write-Host "$($job.Name) construido exitosamente" -ForegroundColor Green
+        } else {
+            Write-Host "ERROR: Fallo la construccion de $($job.Name)" -ForegroundColor Red
+            $output | Where-Object { $_ -isnot [PSCustomObject] } | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+            $failed = $true
+        }
+        Remove-Job -Job $job -Force
+    }
+
+    if ($failed) {
+        Write-Host ""
+        Write-Host "Una o mas builds fallaron. Abortando antes de iniciar servicios." -ForegroundColor Red
         exit 1
     }
-    Pop-Location
-    Write-Host "$service construido exitosamente" -ForegroundColor Green
     Write-Host ""
 }
 
@@ -65,18 +112,16 @@ function Start-Service {
         [string]$serviceName,
         [int]$port
     )
-    
-    Write-Host "Iniciando $serviceName en puerto $port..." -ForegroundColor Yellow
-    
+
     $jarPath = "$serviceName\build\libs\$serviceName-0.0.1-SNAPSHOT.jar"
-    
+
     if (Test-Path $jarPath) {
         # Obtener las variables de entorno actuales
         $dbUrl = $env:DATABASE_URL
         $dbUser = $env:DATABASE_USERNAME
         $dbPass = $env:DATABASE_PASSWORD
         $jwtSecret = $env:JWT_SECRET
-        
+
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "
             Write-Host '============================================' -ForegroundColor Cyan;
             Write-Host '  $serviceName (Puerto $port)' -ForegroundColor Cyan;
@@ -91,31 +136,64 @@ function Start-Service {
             `$env:JWT_SECRET='$jwtSecret';
             java -jar '$jarPath'
         "
-        Write-Host "$serviceName iniciado en nueva ventana" -ForegroundColor Green
+        Write-Host "$serviceName iniciado en nueva ventana (puerto $port)" -ForegroundColor Green
     } else {
         Write-Host "ERROR: JAR no encontrado para $serviceName" -ForegroundColor Red
         Write-Host "Ruta esperada: $jarPath" -ForegroundColor Yellow
     }
 }
 
-# Iniciar cada servicio
-Start-Service "usuario-service" 8081
-Start-Sleep -Seconds 3
+# Espera activa a que un puerto TCP quede escuchando, en vez de un sleep fijo:
+# mas rapido cuando el servicio arranca pronto, y mas confiable cuando tarda mas
+# (el tiempo de arranque de Spring Boot varia bastante segun la maquina).
+function Wait-ForPort {
+    param (
+        [int]$port,
+        [int]$timeoutSeconds = 60
+    )
+    $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $client = New-Object System.Net.Sockets.TcpClient
+        try {
+            $async = $client.BeginConnect("127.0.0.1", $port, $null, $null)
+            if ($async.AsyncWaitHandle.WaitOne(500) -and $client.Connected) {
+                return $true
+            }
+        } catch {
+        } finally {
+            $client.Close()
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
 
-Start-Service "producto-service" 8082
-Start-Sleep -Seconds 3
+# Los 4 microservicios son independientes entre si: se lanzan todos de una vez
+# en lugar de uno por uno con sleeps fijos entre cada uno.
+$microservicios = [ordered]@{
+    "usuario-service"  = 8081
+    "producto-service" = 8082
+    "carrito-service"  = 8083
+    "ventas-service"   = 8084
+}
+foreach ($svc in $microservicios.Keys) {
+    Start-Service $svc $microservicios[$svc]
+}
 
-Start-Service "carrito-service" 8083
-Start-Sleep -Seconds 3
+Write-Host ""
+Write-Host "Esperando a que los 4 microservicios abran su puerto..." -ForegroundColor Yellow
+foreach ($svc in $microservicios.Keys) {
+    if (Wait-ForPort -port $microservicios[$svc]) {
+        Write-Host "  $svc listo (puerto $($microservicios[$svc]))" -ForegroundColor Green
+    } else {
+        Write-Host "  $svc no respondio a tiempo (puerto $($microservicios[$svc])) - revisa su ventana/log" -ForegroundColor Red
+    }
+}
 
-Start-Service "ventas-service" 8084
-Start-Sleep -Seconds 3
-
-# El gateway y el BFF arrancan al final: enrutan/orquestan hacia los 4
-# microservicios de arriba, que ya deben estar corriendo.
+# El gateway y el BFF enrutan/orquestan hacia los 4 microservicios de arriba,
+# por eso arrancan despues de que esos puertos ya estan escuchando.
+Write-Host ""
 Start-Service "api-gateway" 8080
-Start-Sleep -Seconds 3
-
 Start-Service "bff" 8085
 
 Write-Host ""
@@ -130,5 +208,7 @@ Write-Host "  Carrito Service:  http://localhost:8083/swagger-ui.html" -Foregrou
 Write-Host "  Ventas Service:   http://localhost:8084/swagger-ui.html" -ForegroundColor Cyan
 Write-Host "  API Gateway:      http://localhost:8080 (entrada unica, valida JWT)" -ForegroundColor Cyan
 Write-Host "  BFF:              http://localhost:8085/swagger-ui.html" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Tip: la proxima vez, si no cambiaste codigo, usa -SkipBuild para saltar el build por completo." -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "Presiona Ctrl+C en cada ventana para detener los servicios" -ForegroundColor Yellow
