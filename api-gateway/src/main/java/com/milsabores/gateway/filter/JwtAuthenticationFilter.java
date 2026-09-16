@@ -36,6 +36,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             "/api/usuarios/register",
             "/api/usuarios/registro",
             "/api/productos",
+            "/api/categorias",
             "/actuator"
     );
 
