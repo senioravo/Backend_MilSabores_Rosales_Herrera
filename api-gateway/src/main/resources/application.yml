@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: usuario-service
+          uri: ${USUARIO_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/usuarios/**
+        - id: producto-service
+          uri: ${PRODUCTO_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/productos/**
+        - id: carrito-service
+          uri: ${CARRITO_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/carrito/**
+        - id: ventas-service
+          uri: ${VENTAS_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/ventas/**
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:5173"
+              - "http://localhost:3000"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+
+server:
+  port: 8080
+
+# Mismo secreto que usuario-service usa para firmar los tokens: el gateway
+# valida la firma, no la genera.
+jwt:
+  secret: ${JWT_SECRET:milsabores-secret-key-2024-super-segura-para-produccion-cambiar}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,gateway
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
