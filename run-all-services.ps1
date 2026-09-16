@@ -33,33 +33,17 @@ Write-Host ""
 Write-Host "Construyendo proyectos con Gradle..." -ForegroundColor Yellow
 Write-Host ""
 
-# Refrescar PATH para detectar Gradle recién instalado
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-
-# Verificar si gradle está instalado globalmente
-$gradleInstalled = Get-Command gradle -ErrorAction SilentlyContinue
-
-if (-not $gradleInstalled) {
-    Write-Host "ERROR: Gradle no esta instalado en el sistema" -ForegroundColor Red
-    Write-Host "Instala Gradle desde: https://gradle.org/install/" -ForegroundColor Yellow
-    Write-Host "O usa: choco install gradle" -ForegroundColor Yellow
-    exit 1
-}
-
-Write-Host "Gradle detectado:" -ForegroundColor Green
-gradle --version | Select-Object -First 1
-Write-Host ""
-
-# Construir cada servicio
+# Cada servicio trae su propio wrapper (gradlew.bat + gradle-wrapper.jar), asi
+# que no depende de tener `gradle` instalado globalmente. El toolchain plugin
+# en settings.gradle descarga el JDK 17 solo si hace falta.
 $services = @("usuario-service", "producto-service", "carrito-service", "ventas-service", "api-gateway", "bff")
 
 foreach ($service in $services) {
     Write-Host "Construyendo $service..." -ForegroundColor Cyan
     Push-Location $service
-    
-    # Usar gradle global en lugar del wrapper
-    gradle clean build -x test
-    
+
+    .\gradlew.bat clean build -x test
+
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Falló la construcción de $service" -ForegroundColor Red
         Pop-Location
