@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: bff
+
+server:
+  port: 8085
+
+# El BFF llama directo a los microservicios (sin pasar de nuevo por el
+# gateway) para evitar un doble salto de red. Mismas variables de entorno
+# que usa api-gateway, para que un despliegue solo tenga que definirlas una vez.
+services:
+  usuario:
+    url: ${USUARIO_SERVICE_URL:http://localhost:8081}
+  producto:
+    url: ${PRODUCTO_SERVICE_URL:http://localhost:8082}
+  carrito:
+    url: ${CARRITO_SERVICE_URL:http://localhost:8083}
+  ventas:
+    url: ${VENTAS_SERVICE_URL:http://localhost:8084}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

@@ -12,14 +12,22 @@ spring:
           uri: ${PRODUCTO_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/productos/**
+        - id: categoria-service
+          uri: ${PRODUCTO_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/categorias/**
         - id: carrito-service
           uri: ${CARRITO_SERVICE_URL:http://localhost:8083}
           predicates:
-            - Path=/api/carrito/**
+            - Path=/api/carritos/**
         - id: ventas-service
           uri: ${VENTAS_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/ventas/**
+        - id: bff
+          uri: ${BFF_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/bff/**
       globalcors:
         cors-configurations:
           '[/**]':
