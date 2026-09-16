@@ -51,7 +51,7 @@ gradle --version | Select-Object -First 1
 Write-Host ""
 
 # Construir cada servicio
-$services = @("usuario-service", "producto-service", "carrito-service", "ventas-service")
+$services = @("usuario-service", "producto-service", "carrito-service", "ventas-service", "api-gateway", "bff")
 
 foreach ($service in $services) {
     Write-Host "Construyendo $service..." -ForegroundColor Cyan
@@ -125,6 +125,14 @@ Start-Service "carrito-service" 8083
 Start-Sleep -Seconds 3
 
 Start-Service "ventas-service" 8084
+Start-Sleep -Seconds 3
+
+# El gateway y el BFF arrancan al final: enrutan/orquestan hacia los 4
+# microservicios de arriba, que ya deben estar corriendo.
+Start-Service "api-gateway" 8080
+Start-Sleep -Seconds 3
+
+Start-Service "bff" 8085
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
@@ -136,5 +144,7 @@ Write-Host "  Usuario Service:  http://localhost:8081/swagger-ui.html" -Foregrou
 Write-Host "  Producto Service: http://localhost:8082/swagger-ui.html" -ForegroundColor Cyan
 Write-Host "  Carrito Service:  http://localhost:8083/swagger-ui.html" -ForegroundColor Cyan
 Write-Host "  Ventas Service:   http://localhost:8084/swagger-ui.html" -ForegroundColor Cyan
+Write-Host "  API Gateway:      http://localhost:8080 (entrada unica, valida JWT)" -ForegroundColor Cyan
+Write-Host "  BFF:              http://localhost:8085/swagger-ui.html" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Presiona Ctrl+C en cada ventana para detener los servicios" -ForegroundColor Yellow

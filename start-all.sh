@@ -23,6 +23,8 @@ pkill -f usuario-service
 pkill -f producto-service
 pkill -f carrito-service
 pkill -f ventas-service
+pkill -f api-gateway
+pkill -f "bff-"
 sleep 3
 
 echo ""
@@ -47,6 +49,18 @@ echo ""
 echo "Iniciando ventas-service en puerto 8084..."
 nohup java -Xms256m -Xmx512m -jar ~/ventas-service-0.0.1-SNAPSHOT.jar > ~/logs/ventas-service.log 2>&1 &
 echo "Ventas-service iniciado (PID: $!)"
+sleep 10
+
+echo ""
+echo "Iniciando api-gateway en puerto 8080..."
+nohup java -Xms256m -Xmx512m -jar ~/api-gateway-0.0.1-SNAPSHOT.jar > ~/logs/api-gateway.log 2>&1 &
+echo "API Gateway iniciado (PID: $!)"
+sleep 10
+
+echo ""
+echo "Iniciando bff en puerto 8085..."
+nohup java -Xms256m -Xmx512m -jar ~/bff-0.0.1-SNAPSHOT.jar > ~/logs/bff.log 2>&1 &
+echo "BFF iniciado (PID: $!)"
 sleep 5
 
 echo ""
@@ -59,7 +73,7 @@ echo ""
 echo "======================================"
 echo "Verificando puertos..."
 echo "======================================"
-sudo ss -tulpn | grep -E ':(8081|8082|8083|8084)'
+sudo ss -tulpn | grep -E ':(8080|8081|8082|8083|8084|8085)'
 
 echo ""
 echo "======================================"
@@ -71,6 +85,8 @@ echo "  - Usuario:  http://100.30.4.167:8081/api/usuarios"
 echo "  - Producto: http://100.30.4.167:8082/api/productos"
 echo "  - Carrito:  http://100.30.4.167:8083/api/carritos"
 echo "  - Ventas:   http://100.30.4.167:8084/api/ventas"
+echo "  - Gateway:  http://100.30.4.167:8080 (entrada unica recomendada)"
+echo "  - BFF:      http://100.30.4.167:8085/bff/checkout"
 echo ""
 echo "Logs disponibles en ~/logs/"
 echo ""
@@ -79,4 +95,6 @@ echo "  tail -f ~/logs/usuario-service.log"
 echo "  tail -f ~/logs/producto-service.log"
 echo "  tail -f ~/logs/carrito-service.log"
 echo "  tail -f ~/logs/ventas-service.log"
+echo "  tail -f ~/logs/api-gateway.log"
+echo "  tail -f ~/logs/bff.log"
 echo ""
