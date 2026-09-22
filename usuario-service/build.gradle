@@ -8,9 +8,8 @@ group = 'com.milsabores'
 version = '0.0.1-SNAPSHOT'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
-	}
+	sourceCompatibility = '17'
+	targetCompatibility = '17'
 }
 
 configurations {
@@ -41,8 +40,8 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	
 	// Lombok
-	compileOnly 'org.projectlombok:lombok'
-	annotationProcessor 'org.projectlombok:lombok'
+	compileOnly 'org.projectlombok:lombok:1.18.38'
+	annotationProcessor 'org.projectlombok:lombok:1.18.38'
 	
 	// Testing
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
