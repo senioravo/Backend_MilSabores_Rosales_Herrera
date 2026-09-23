@@ -29,6 +29,7 @@ echo "Deteniendo ventas-service..."
 pkill -f ventas-service
 sleep 2
 
+<<<<<<< HEAD
 echo "Deteniendo api-gateway..."
 pkill -f api-gateway
 sleep 2
@@ -37,6 +38,8 @@ echo "Deteniendo bff..."
 pkill -f "bff-"
 sleep 2
 
+=======
+>>>>>>> origin/main
 echo ""
 echo "======================================"
 echo "Verificando procesos restantes..."
@@ -57,6 +60,10 @@ echo ""
 echo "======================================"
 echo "Verificando puertos liberados..."
 echo "======================================"
+<<<<<<< HEAD
 sudo ss -tulpn | grep -E ':(8080|8081|8082|8083|8084|8085)' || echo "✓ Todos los puertos liberados (8080-8085)"
+=======
+sudo ss -tulpn | grep -E ':(8081|8082|8083|8084)' || echo "✓ Todos los puertos liberados (8081-8084)"
+>>>>>>> origin/main
 
 echo ""
