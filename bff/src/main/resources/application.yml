@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: bff
+
+server:
+  port: 8085
+
+# El BFF llama directo a los microservicios (sin pasar de nuevo por el
+# gateway) para evitar un doble salto de red. Mismas variables de entorno
+# que usa api-gateway, para que un despliegue solo tenga que definirlas una vez.
+services:
+  usuario:
+    url: ${USUARIO_SERVICE_URL:http://localhost:8081}
+  producto:
+    url: ${PRODUCTO_SERVICE_URL:http://localhost:8082}
+  carrito:
+    url: ${CARRITO_SERVICE_URL:http://localhost:8083}
+  ventas:
+    url: ${VENTAS_SERVICE_URL:http://localhost:8084}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 15s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+    instances:
+      usuario-service:
+        base-config: default
+      producto-service:
+        base-config: default
+      carrito-service:
+        base-config: default
+      ventas-service:
+        base-config: default
+  # Solo para lecturas idempotentes (GET). Crear venta / iniciar pago Transbank
+  # son POST no idempotentes: NO se reintentan aqui para no duplicar una venta
+  # o una transaccion de pago si la primera llamada si se proceso downstream
+  # pero la respuesta se perdio.
+  retry:
+    configs:
+      default:
+        max-attempts: 2
+        wait-duration: 300ms
+    instances:
+      usuario-service:
+        base-config: default
+      producto-service:
+        base-config: default
+      carrito-service:
+        base-config: default

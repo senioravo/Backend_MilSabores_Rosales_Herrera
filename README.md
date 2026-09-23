@@ -2,9 +2,28 @@
 
 Sistema backend desarrollado con Spring Boot para la aplicación Mil Sabores, implementado como microservicios independientes.
 
+<<<<<<< HEAD
+## 🔗 Repositorios del proyecto
+
+| Componente | Repositorio |
+|------------|-------------|
+| **Frontend** | https://github.com/senioravo/DSY1104_ROSALES_HERRERA |
+| **Backend** | https://github.com/senioravo/Backend_MilSabores_Rosales_Herrera |
+
+## 🌿 Flujo de ramas
+
+- `main` — código estable listo para entrega
+- `develop` — integración del equipo
+- `feature/*` — desarrollo por tarea (ej. `feature/setup-repos`)
+
+## 🏗️ Arquitectura
+
+El backend está compuesto por **4 microservicios** independientes:
+=======
 ## 🏗️ Arquitectura
 
 El backend está compuesto por 3 microservicios independientes:
+>>>>>>> origin/main
 
 ### 1. Usuario Service (Puerto 8081)
 - Gestión de usuarios y autenticación
@@ -24,6 +43,14 @@ El backend está compuesto por 3 microservicios independientes:
 - Actualizar cantidades
 - Cálculo de totales
 
+<<<<<<< HEAD
+### 4. Ventas Service (Puerto 8084)
+- Gestión de ventas y detalle de ventas
+- Integración con Transbank Webpay Plus
+- Consultas por usuario, estado y fechas
+
+=======
+>>>>>>> origin/main
 ## 🗄️ Base de Datos
 
 **PostgreSQL en Neon**
@@ -38,6 +65,11 @@ El backend está compuesto por 3 microservicios independientes:
 - `producto_tamanos` - Producto Service
 - `producto_etiquetas` - Producto Service
 - `carrito_items` - Carrito Service
+<<<<<<< HEAD
+- `ventas` - Ventas Service
+- `detalle_ventas` - Ventas Service
+=======
+>>>>>>> origin/main
 
 ## 🚀 Configuración
 
@@ -81,6 +113,12 @@ BackendMilSabores/
 ├── carrito-service/
 │   └── [misma estructura]
 │
+<<<<<<< HEAD
+├── ventas-service/
+│   └── [misma estructura]
+│
+=======
+>>>>>>> origin/main
 └── database/
     └── schema.sql          # Script de creación de BD
 ```
@@ -167,6 +205,21 @@ GET    /api/carrito/usuario/{usuarioId}/total                 - Obtener total
 GET    /api/carrito/usuario/{usuarioId}/cantidad              - Obtener cantidad items
 ```
 
+<<<<<<< HEAD
+### Ventas Service (http://localhost:8084)
+
+```
+POST   /api/ventas                                            - Crear venta
+GET    /api/ventas                                            - Listar ventas
+GET    /api/ventas/{id}                                       - Obtener venta
+GET    /api/ventas/usuario/{usuarioId}                        - Ventas por usuario
+GET    /api/ventas/estado/{estado}                            - Ventas por estado
+PATCH  /api/ventas/{id}/estado                                - Actualizar estado
+DELETE /api/ventas/{id}                                       - Eliminar venta
+```
+
+=======
+>>>>>>> origin/main
 ## 📚 Documentación API (Swagger)
 
 Cada microservicio expone su documentación en:
@@ -174,6 +227,10 @@ Cada microservicio expone su documentación en:
 - Usuario Service: http://localhost:8081/swagger-ui.html
 - Producto Service: http://localhost:8082/swagger-ui.html
 - Carrito Service: http://localhost:8083/swagger-ui.html
+<<<<<<< HEAD
+- Ventas Service: http://localhost:8084/swagger-ui.html
+=======
+>>>>>>> origin/main
 
 ## 🔒 CORS
 
@@ -244,14 +301,27 @@ Los microservicios están configurados para aceptar peticiones desde:
 
 ## 📝 Notas Importantes
 
+<<<<<<< HEAD
+1. **Seguridad**: Contraseñas hasheadas con BCrypt en el servicio de usuarios.
+2. **JWT**: Autenticación JWT implementada en usuario-service. Integración con Azure IDaaS y API Manager pendiente según evaluación.
+=======
 1. **Seguridad**: Las contraseñas actualmente NO están hasheadas. Para producción, implementar BCrypt.
 2. **JWT**: Los tokens JWT no están implementados aún. La autenticación es básica.
+>>>>>>> origin/main
 3. **Transacciones**: Se usa `@Transactional` para garantizar consistencia de datos.
 4. **CORS**: Configurado para desarrollo local. Ajustar para producción.
 5. **Logging**: Spring Boot proporciona logging por defecto. Revisar logs con `tail -f logs/spring.log`.
 
 ## 🔄 Próximas Mejoras
 
+<<<<<<< HEAD
+- [ ] Integrar validación JWT de Azure IDaaS en todos los microservicios
+- [ ] Configurar API Manager como gateway con validación JWT
+- [ ] Agregar Redis para caché
+- [ ] Agregar Circuit Breaker (Resilience4j)
+- [ ] Agregar métricas y monitoring (Actuator + Prometheus)
+- [ ] Ampliar tests unitarios e integración
+=======
 - [ ] Implementar seguridad con Spring Security y JWT
 - [ ] Hashear contraseñas con BCrypt
 - [ ] Agregar Redis para caché
@@ -260,6 +330,7 @@ Los microservicios están configurados para aceptar peticiones desde:
 - [ ] Implementar service discovery (Eureka)
 - [ ] Agregar métricas y monitoring (Actuator + Prometheus)
 - [ ] Tests unitarios e integración
+>>>>>>> origin/main
 - [ ] Dockerizar los microservicios
 
 ## 📧 Contacto
