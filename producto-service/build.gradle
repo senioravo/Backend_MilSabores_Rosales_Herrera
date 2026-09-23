@@ -8,14 +8,9 @@ group = 'com.milsabores'
 version = '0.0.1-SNAPSHOT'
 
 java {
-<<<<<<< HEAD
-	sourceCompatibility = '17'
-	targetCompatibility = '17'
-=======
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(17)
 	}
->>>>>>> origin/main
 }
 
 configurations {
@@ -32,6 +27,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	
 	// OpenAPI/Swagger - Versión compatible con Spring Boot 3.4.x
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
@@ -40,13 +36,8 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	
 	// Lombok
-<<<<<<< HEAD
-	compileOnly 'org.projectlombok:lombok:1.18.38'
-	annotationProcessor 'org.projectlombok:lombok:1.18.38'
-=======
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
->>>>>>> origin/main
 	
 	// Testing
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'

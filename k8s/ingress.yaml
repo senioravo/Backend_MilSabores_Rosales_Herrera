@@ -1,0 +1,24 @@
+# Expone el api-gateway fuera del cluster (requiere un Ingress Controller NGINX).
+#   minikube:        minikube addons enable ingress
+#   Docker Desktop:  https://kubernetes.github.io/ingress-nginx/deploy/
+# Agregar "127.0.0.1 milsabores.local" (o la IP de minikube) al archivo hosts.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: milsabores-ingress
+  namespace: milsabores
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: milsabores.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080

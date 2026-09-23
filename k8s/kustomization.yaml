@@ -1,0 +1,31 @@
+# Despliegue completo:  kubectl apply -k k8s/
+# (crear antes el Secret milsabores-secrets, ver secret.example.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: milsabores
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - usuario-service.yaml
+  - producto-service.yaml
+  - carrito-service.yaml
+  - ventas-service.yaml
+  - bff.yaml
+  - api-gateway.yaml
+  - ingress.yaml
+
+# Para usar un registry (Docker Hub, GHCR, ECR...), cambiar newName/newTag:
+images:
+  - name: milsabores/usuario-service
+    newTag: latest
+  - name: milsabores/producto-service
+    newTag: latest
+  - name: milsabores/carrito-service
+    newTag: latest
+  - name: milsabores/ventas-service
+    newTag: latest
+  - name: milsabores/bff
+    newTag: latest
+  - name: milsabores/api-gateway
+    newTag: latest

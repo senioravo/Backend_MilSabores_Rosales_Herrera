@@ -1,0 +1,79 @@
+# producto-service - productos y categorías
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: producto-service
+  namespace: milsabores
+  labels:
+    app: producto-service
+    app.kubernetes.io/part-of: milsabores
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: producto-service
+  template:
+    metadata:
+      labels:
+        app: producto-service
+        app.kubernetes.io/part-of: milsabores
+    spec:
+      # Evita que K8s inyecte variables *_SERVICE_PORT que ensucian el entorno de Spring
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: producto-service
+          image: milsabores/producto-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+          env:
+            - name: PORT
+              value: "8082"
+          envFrom:
+            - configMapRef:
+                name: milsabores-config
+            - secretRef:
+                name: milsabores-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          # Spring Boot tarda en arrancar: el startupProbe da hasta ~3 min
+          # antes de que empiecen a correr liveness/readiness.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: producto-service
+  namespace: milsabores
+  labels:
+    app: producto-service
+spec:
+  type: ClusterIP
+  selector:
+    app: producto-service
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http

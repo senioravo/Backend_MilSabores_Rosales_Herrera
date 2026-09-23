@@ -1,0 +1,12 @@
+# Artefactos locales: la imagen compila desde el código fuente
+build/
+bin/
+out/
+.gradle/
+.idea/
+.vscode/
+*.iml
+# Nunca copiar credenciales a la imagen
+.env
+.env.*
+*.log

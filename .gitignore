@@ -39,10 +39,7 @@ out/
 ### graphify ###
 graphify-out/
 **/graphify-out/
-<<<<<<< HEAD
 
-=======
->>>>>>> origin/main
 ### Claude Code ###
 .claude/settings.local.json
 .claude/worktrees/
@@ -52,13 +49,10 @@ node_modules/
 
 # Variables de entorno
 .env
-<<<<<<< HEAD
 .env.*
 !.env.example
-=======
 .env.local
 .env.*.local
->>>>>>> origin/main
 
 # Logs
 logs/
@@ -66,7 +60,6 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-<<<<<<< HEAD
 hs_err_pid*.log
 replay_pid*.log
 
@@ -78,14 +71,6 @@ dist/
 # Sistema / IDE
 .DS_Store
 .idea/
-=======
 
-# Builds
-dist/
-build/
-
-# Sistema / IDE
-.DS_Store
-.vscode/
-.idea/
->>>>>>> origin/main
+# Kubernetes: Secret con credenciales reales (usar k8s/secret.example.yaml como plantilla)
+k8s/secret.yaml

@@ -1,0 +1,154 @@
+# ============================================================
+#  Mil Sabores - Render Blueprint (Infrastructure as Code)
+#  Render Dashboard -> New -> Blueprint -> seleccionar este repo.
+#
+#  - Cada microservicio se construye con el Dockerfile de su carpeta.
+#  - DATABASE_* se piden al crear el Blueprint (sync: false): usar la
+#    misma conexión Neon en los 4 servicios de datos.
+#  - JWT_SECRET se genera una vez en el grupo compartido, así
+#    usuario-service (firma) y api-gateway (valida) usan el mismo.
+#  - Plan free: los servicios se duermen tras 15 min sin tráfico y el
+#    primer request tarda ~1 min en despertarlos.
+#  - En plan free un servicio no recibe tráfico por la red privada, por
+#    eso gateway y bff llaman a los demás por su URL pública .onrender.com.
+#    Si Render agrega un sufijo al nombre (p. ej. -abcd), corregir las
+#    URLs *_SERVICE_URL en el Dashboard.
+#  - Región virginia: Render no tiene región en Sudamérica y es la más
+#    cercana a la base Neon (sa-east-1, São Paulo).
+# ============================================================
+
+envVarGroups:
+  - name: milsabores-shared
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SPRING_JPA_SHOW_SQL
+        value: "false"
+      # Plan free = 0.1 CPU y 512 MB: SerialGC y TieredStopAtLevel=1 acortan
+      # el arranque y bajan el consumo de memoria de la JVM.
+      - key: JAVA_OPTS
+        value: "-XX:MaxRAMPercentage=65.0 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:+ExitOnOutOfMemoryError"
+
+services:
+  - type: web
+    name: milsabores-usuario-service
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerContext: ./usuario-service
+    dockerfilePath: ./usuario-service/Dockerfile
+    healthCheckPath: /actuator/health
+    buildFilter:
+      paths: ["usuario-service/**"]
+    envVars:
+      - fromGroup: milsabores-shared
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+
+  - type: web
+    name: milsabores-producto-service
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerContext: ./producto-service
+    dockerfilePath: ./producto-service/Dockerfile
+    healthCheckPath: /actuator/health
+    buildFilter:
+      paths: ["producto-service/**"]
+    envVars:
+      - fromGroup: milsabores-shared
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+
+  - type: web
+    name: milsabores-carrito-service
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerContext: ./carrito-service
+    dockerfilePath: ./carrito-service/Dockerfile
+    healthCheckPath: /actuator/health
+    buildFilter:
+      paths: ["carrito-service/**"]
+    envVars:
+      - fromGroup: milsabores-shared
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+
+  - type: web
+    name: milsabores-ventas-service
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerContext: ./ventas-service
+    dockerfilePath: ./ventas-service/Dockerfile
+    healthCheckPath: /actuator/health
+    buildFilter:
+      paths: ["ventas-service/**"]
+    envVars:
+      - fromGroup: milsabores-shared
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+
+  - type: web
+    name: milsabores-bff
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerContext: ./bff
+    dockerfilePath: ./bff/Dockerfile
+    healthCheckPath: /actuator/health
+    buildFilter:
+      paths: ["bff/**"]
+    envVars:
+      - fromGroup: milsabores-shared
+      - key: USUARIO_SERVICE_URL
+        value: https://milsabores-usuario-service.onrender.com
+      - key: PRODUCTO_SERVICE_URL
+        value: https://milsabores-producto-service.onrender.com
+      - key: CARRITO_SERVICE_URL
+        value: https://milsabores-carrito-service.onrender.com
+      - key: VENTAS_SERVICE_URL
+        value: https://milsabores-ventas-service.onrender.com
+
+  # Punto de entrada público: el frontend (Vercel) debe apuntar a esta URL.
+  - type: web
+    name: milsabores-api-gateway
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerContext: ./api-gateway
+    dockerfilePath: ./api-gateway/Dockerfile
+    healthCheckPath: /actuator/health
+    buildFilter:
+      paths: ["api-gateway/**"]
+    envVars:
+      - fromGroup: milsabores-shared
+      - key: FRONTEND_URL
+        value: https://dsy-1104-rosales-herrera.vercel.app
+      - key: USUARIO_SERVICE_URL
+        value: https://milsabores-usuario-service.onrender.com
+      - key: PRODUCTO_SERVICE_URL
+        value: https://milsabores-producto-service.onrender.com
+      - key: CARRITO_SERVICE_URL
+        value: https://milsabores-carrito-service.onrender.com
+      - key: VENTAS_SERVICE_URL
+        value: https://milsabores-ventas-service.onrender.com
+      - key: BFF_SERVICE_URL
+        value: https://milsabores-bff.onrender.com

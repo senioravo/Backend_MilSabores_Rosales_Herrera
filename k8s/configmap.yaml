@@ -1,0 +1,16 @@
+# Configuración no sensible compartida por todos los pods.
+# Las URLs usan el DNS interno de Kubernetes (<service>.<namespace>.svc).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: milsabores-config
+  namespace: milsabores
+data:
+  USUARIO_SERVICE_URL: http://usuario-service:8081
+  PRODUCTO_SERVICE_URL: http://producto-service:8082
+  CARRITO_SERVICE_URL: http://carrito-service:8083
+  VENTAS_SERVICE_URL: http://ventas-service:8084
+  BFF_SERVICE_URL: http://bff:8085
+  FRONTEND_URL: https://dsy-1104-rosales-herrera.vercel.app
+  # Menos ruido en los logs del cluster (en local sigue en true)
+  SPRING_JPA_SHOW_SQL: "false"

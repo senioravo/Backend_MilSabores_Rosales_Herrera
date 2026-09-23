@@ -1,0 +1,76 @@
+# ============================================================
+#  Mil Sabores - entorno local con Docker Compose
+#
+#  Requisitos: archivo .env en esta carpeta (copiar .env.example)
+#  con DATABASE_URL, DATABASE_USERNAME, DATABASE_PASSWORD y JWT_SECRET.
+#
+#  Levantar:  docker compose up --build -d
+#  Logs:      docker compose logs -f api-gateway
+#  Bajar:     docker compose down
+#
+#  Punto de entrada: http://localhost:8080 (api-gateway)
+# ============================================================
+
+x-spring-service: &spring-service
+  restart: unless-stopped
+  env_file: .env
+  networks: [milsabores]
+
+services:
+  usuario-service:
+    <<: *spring-service
+    build: ./usuario-service
+    image: milsabores/usuario-service:latest
+    ports: ["8081:8081"]
+
+  producto-service:
+    <<: *spring-service
+    build: ./producto-service
+    image: milsabores/producto-service:latest
+    ports: ["8082:8082"]
+
+  carrito-service:
+    <<: *spring-service
+    build: ./carrito-service
+    image: milsabores/carrito-service:latest
+    ports: ["8083:8083"]
+
+  ventas-service:
+    <<: *spring-service
+    build: ./ventas-service
+    image: milsabores/ventas-service:latest
+    ports: ["8084:8084"]
+
+  bff:
+    <<: *spring-service
+    build: ./bff
+    image: milsabores/bff:latest
+    ports: ["8085:8085"]
+    environment:
+      USUARIO_SERVICE_URL: http://usuario-service:8081
+      PRODUCTO_SERVICE_URL: http://producto-service:8082
+      CARRITO_SERVICE_URL: http://carrito-service:8083
+      VENTAS_SERVICE_URL: http://ventas-service:8084
+    depends_on:
+      usuario-service: { condition: service_healthy }
+      producto-service: { condition: service_healthy }
+      carrito-service: { condition: service_healthy }
+      ventas-service: { condition: service_healthy }
+
+  api-gateway:
+    <<: *spring-service
+    build: ./api-gateway
+    image: milsabores/api-gateway:latest
+    ports: ["8080:8080"]
+    environment:
+      USUARIO_SERVICE_URL: http://usuario-service:8081
+      PRODUCTO_SERVICE_URL: http://producto-service:8082
+      CARRITO_SERVICE_URL: http://carrito-service:8083
+      VENTAS_SERVICE_URL: http://ventas-service:8084
+      BFF_SERVICE_URL: http://bff:8085
+    depends_on:
+      bff: { condition: service_healthy }
+
+networks:
+  milsabores:
+    driver: bridge
