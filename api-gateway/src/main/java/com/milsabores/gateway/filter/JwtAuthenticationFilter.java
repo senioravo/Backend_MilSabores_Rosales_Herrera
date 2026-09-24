@@ -37,6 +37,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
             "/api/usuarios/registro",
             "/api/productos",
             "/api/categorias",
+            // Transbank vuelve por redirección del navegador, sin JWT
+            "/api/ventas/transbank/return",
             "/actuator"
     );
 
