@@ -43,10 +43,10 @@ spring.jpa.properties.hibernate.format_sql=true
 
 Variables de entorno en `.env`:
 ```
-DATABASE_URL=jdbc:postgresql://ep-noisy-glade-acnt8zv8-pooler.sa-east-1.aws.neon.tech:5432/neondb?sslmode=require
-DATABASE_USERNAME=neondb_owner
-DATABASE_PASSWORD=npg_5CjH6VAeioaF
-JWT_SECRET=milsabores-secret-key-2024-super-segura-para-produccion-cambiar
+DATABASE_URL=jdbc:postgresql://TU-HOST-NEON.aws.neon.tech:5432/neondb?sslmode=require
+DATABASE_USERNAME=tu-usuario-neon
+DATABASE_PASSWORD=tu-password-neon
+JWT_SECRET=tu-jwt-secret-local-no-subir-a-git
 ```
 
 HikariCP maneja el connection pool automáticamente. SSL requerido por Neon con `sslmode=require`. DDL-auto en `update` para sincronización automática de esquema sin pérdida de datos.

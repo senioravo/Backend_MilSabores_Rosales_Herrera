@@ -56,7 +56,7 @@ El backend de Mil Sabores sigue un patrón de **arquitectura de microservicios**
                    ▼
      ┌─────────────────────────────────────┐
      │   Neon PostgreSQL Cloud Database    │
-     │   ep-noisy-glade-acnt8zv8-pooler    │
+     │   TU-HOST-NEON (Neon pooler)        │
      │   Port: 5432 (SSL Required)         │
      │   Region: sa-east-1 (AWS São Paulo) │
      └─────────────────────────────────────┘
@@ -432,9 +432,9 @@ GROUP BY estado;
 
 ```properties
 # Connection String
-DATABASE_URL=jdbc:postgresql://ep-noisy-glade-acnt8zv8-pooler.sa-east-1.aws.neon.tech:5432/neondb?sslmode=require
-DATABASE_USERNAME=neondb_owner
-DATABASE_PASSWORD=npg_5CjH6VAeioaF
+DATABASE_URL=jdbc:postgresql://TU-HOST-NEON.aws.neon.tech:5432/neondb?sslmode=require
+DATABASE_USERNAME=tu-usuario-neon
+DATABASE_PASSWORD=tu-password-neon
 
 # Características
 - PostgreSQL Version: 17.6
@@ -1108,12 +1108,12 @@ List<Producto> findAllActivosConCategoria();
 
 ```bash
 # Database Configuration
-DATABASE_URL=jdbc:postgresql://ep-noisy-glade-acnt8zv8-pooler.sa-east-1.aws.neon.tech:5432/neondb?sslmode=require
-DATABASE_USERNAME=neondb_owner
-DATABASE_PASSWORD=npg_5CjH6VAeioaF
+DATABASE_URL=jdbc:postgresql://TU-HOST-NEON.aws.neon.tech:5432/neondb?sslmode=require
+DATABASE_USERNAME=tu-usuario-neon
+DATABASE_PASSWORD=tu-password-neon
 
 # JWT Configuration
-JWT_SECRET=milsabores-secret-key-2024-super-segura-para-produccion-cambiar
+JWT_SECRET=tu-jwt-secret-local-no-subir-a-git
 ```
 
 ### Script de Inicio (`run-all-services.ps1`)
