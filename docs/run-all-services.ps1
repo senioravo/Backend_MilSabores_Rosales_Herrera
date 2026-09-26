@@ -11,23 +11,32 @@ param(
     [switch]$Clean
 )
 
+# Raíz del repo backend (este script vive en docs/)
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$envFile = Join-Path $root ".env"
+
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  Iniciando Microservicios Mil Sabores" -ForegroundColor Cyan
+Write-Host "  Raiz: $root" -ForegroundColor DarkGray
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Cargar variables de entorno del archivo .env
-if (Test-Path ".env") {
+# Cargar variables de entorno del archivo .env en la raiz del backend
+if (Test-Path $envFile) {
     Write-Host "Cargando variables de entorno desde .env..." -ForegroundColor Yellow
-    Get-Content .env | ForEach-Object {
+    Get-Content $envFile | ForEach-Object {
         if ($_ -match '^([^#][^=]+)=(.*)$') {
             [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), "Process")
         }
     }
 } else {
-    Write-Host "ADVERTENCIA: Archivo .env no encontrado. Usando valores por defecto." -ForegroundColor Red
-    Write-Host "Copia .env.example a .env y configura tus credenciales de Neon." -ForegroundColor Yellow
+    Write-Host "ADVERTENCIA: Archivo .env no encontrado en $root" -ForegroundColor Red
+    Write-Host "Copia .env.example a .env y configura Neon + AZURE_* (ver docs/GUIA-ENTORNO-LOCAL-EP1.md)." -ForegroundColor Yellow
     Write-Host ""
+}
+
+if (-not $env:FRONTEND_URL) {
+    $env:FRONTEND_URL = "http://localhost:5173"
 }
 
 # Verificar que Java está instalado
@@ -40,7 +49,6 @@ if ($javaVersion) {
 }
 
 $services = @("usuario-service", "producto-service", "carrito-service", "ventas-service", "api-gateway", "bff")
-$root = $PSScriptRoot
 
 if ($SkipBuild) {
     Write-Host ""
@@ -113,16 +121,30 @@ function Start-Service {
         [int]$port
     )
 
-    $jarPath = "$serviceName\build\libs\$serviceName-0.0.1-SNAPSHOT.jar"
+    $jarPath = Join-Path $root "$serviceName\build\libs\$serviceName-0.0.1-SNAPSHOT.jar"
 
     if (Test-Path $jarPath) {
-        # Obtener las variables de entorno actuales
-        $dbUrl = $env:DATABASE_URL
-        $dbUser = $env:DATABASE_USERNAME
-        $dbPass = $env:DATABASE_PASSWORD
-        $jwtSecret = $env:JWT_SECRET
+        $envLines = @(
+            "`$env:DATABASE_URL='$($env:DATABASE_URL)'",
+            "`$env:DATABASE_USERNAME='$($env:DATABASE_USERNAME)'",
+            "`$env:DATABASE_PASSWORD='$($env:DATABASE_PASSWORD)'",
+            "`$env:JWT_SECRET='$($env:JWT_SECRET)'",
+            "`$env:AZURE_ENTRA_ENABLED='$($env:AZURE_ENTRA_ENABLED)'",
+            "`$env:AZURE_TENANT_ID='$($env:AZURE_TENANT_ID)'",
+            "`$env:AZURE_CLIENT_ID='$($env:AZURE_CLIENT_ID)'",
+            "`$env:AZURE_API_AUDIENCE='$($env:AZURE_API_AUDIENCE)'",
+            "`$env:FRONTEND_URL='$($env:FRONTEND_URL)'",
+            "`$env:USUARIO_SERVICE_URL='http://localhost:8081'",
+            "`$env:PRODUCTO_SERVICE_URL='http://localhost:8082'",
+            "`$env:CARRITO_SERVICE_URL='http://localhost:8083'",
+            "`$env:VENTAS_SERVICE_URL='http://localhost:8084'",
+            "`$env:BFF_SERVICE_URL='http://localhost:8085'"
+        ) -join '; '
+
+        $jarPathEscaped = $jarPath -replace "'", "''"
 
         Start-Process powershell -ArgumentList "-NoExit", "-Command", "
+            Set-Location '$root';
             Write-Host '============================================' -ForegroundColor Cyan;
             Write-Host '  $serviceName (Puerto $port)' -ForegroundColor Cyan;
             Write-Host '============================================' -ForegroundColor Cyan;
@@ -130,11 +152,8 @@ function Start-Service {
             Write-Host 'Swagger UI: http://localhost:$port/swagger-ui.html' -ForegroundColor Green;
             Write-Host 'API Docs: http://localhost:$port/v3/api-docs' -ForegroundColor Green;
             Write-Host '';
-            `$env:DATABASE_URL='$dbUrl';
-            `$env:DATABASE_USERNAME='$dbUser';
-            `$env:DATABASE_PASSWORD='$dbPass';
-            `$env:JWT_SECRET='$jwtSecret';
-            java -jar '$jarPath'
+            $envLines;
+            java -jar '$jarPathEscaped'
         "
         Write-Host "$serviceName iniciado en nueva ventana (puerto $port)" -ForegroundColor Green
     } else {

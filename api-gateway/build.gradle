@@ -25,8 +25,11 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
-	// JWT - misma librería y versión que usuario-service, para validar los
-	// mismos tokens firmados con JWT_SECRET
+	// Validación JWT Microsoft Entra (access_token MSAL) — paso 1 EP1
+	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+
+	// JWT legacy usuario-service (HS256 + JWT_SECRET)
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'

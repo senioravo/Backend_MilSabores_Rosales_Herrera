@@ -2,6 +2,7 @@ package com.milsabores.usuario.service;
 
 import com.milsabores.usuario.dto.*;
 import com.milsabores.usuario.exception.EmailAlreadyExistsException;
+import com.milsabores.usuario.exception.EntraProfileException;
 import com.milsabores.usuario.exception.InvalidCredentialsException;
 import com.milsabores.usuario.exception.UsuarioNotFoundException;
 import com.milsabores.usuario.model.Usuario;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -83,6 +86,63 @@ public class UsuarioService {
 
         UsuarioResponseDTO usuarioResponse = convertToResponseDTO(usuario);
         return new AuthResponseDTO(true, "Inicio de sesión exitoso", usuarioResponse, token);
+    }
+
+    /**
+     * EP1 B5: resuelve o crea fila en Neon a partir de headers Entra inyectados por api-gateway.
+     */
+    public UsuarioResponseDTO sincronizarPerfilEntra(String email, String entraOid, String displayName) {
+        if (email == null || email.isBlank()) {
+            throw new EntraProfileException("Falta X-User-Email (token Entra o gateway)");
+        }
+
+        String normalizedEmail = email.toLowerCase().trim();
+        Optional<Usuario> existing = Optional.empty();
+
+        if (entraOid != null && !entraOid.isBlank()) {
+            existing = usuarioRepository.findByEntraOid(entraOid.trim());
+        }
+        if (existing.isEmpty()) {
+            existing = usuarioRepository.findByEmail(normalizedEmail);
+        }
+
+        if (existing.isPresent()) {
+            Usuario usuario = existing.get();
+            if (!Boolean.TRUE.equals(usuario.getActivo())) {
+                throw new InvalidCredentialsException("Usuario inactivo");
+            }
+            if (entraOid != null && !entraOid.isBlank() && usuario.getEntraOid() == null) {
+                usuario.setEntraOid(entraOid.trim());
+            }
+            String resolvedName = resolveDisplayName(displayName, normalizedEmail);
+            if (resolvedName != null) {
+                usuario.setNombre(resolvedName);
+            }
+            return convertToResponseDTO(usuarioRepository.save(usuario));
+        }
+
+        Usuario nuevo = new Usuario();
+        nuevo.setEmail(normalizedEmail);
+        nuevo.setEntraOid(entraOid != null && !entraOid.isBlank() ? entraOid.trim() : null);
+        nuevo.setNombre(resolveDisplayName(displayName, normalizedEmail));
+        nuevo.setPassword(passwordEncoder.encode(generateEntraPlaceholderPassword()));
+        return convertToResponseDTO(usuarioRepository.save(nuevo));
+    }
+
+    private static String resolveDisplayName(String displayName, String email) {
+        if (displayName != null && displayName.trim().length() >= 2) {
+            return displayName.trim();
+        }
+        int at = email.indexOf('@');
+        String local = at > 0 ? email.substring(0, at) : email;
+        if (local.length() >= 2) {
+            return local.substring(0, 1).toUpperCase() + local.substring(1);
+        }
+        return "Usuario";
+    }
+
+    private static String generateEntraPlaceholderPassword() {
+        return "Entra!" + UUID.randomUUID() + "1a";
     }
 
     /**

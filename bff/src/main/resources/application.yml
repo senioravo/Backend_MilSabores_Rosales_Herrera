@@ -73,3 +73,15 @@ resilience4j:
         base-config: default
       carrito-service:
         base-config: default
+      ventas-service:
+        base-config: default
+
+jwt:
+  secret: ${JWT_SECRET:milsabores-secret-key-2024-super-segura-para-produccion-cambiar}
+
+azure:
+  entra:
+    enabled: ${AZURE_ENTRA_ENABLED:false}
+    tenant-id: ${AZURE_TENANT_ID:}
+    client-id: ${AZURE_CLIENT_ID:}
+    audience: ${AZURE_API_AUDIENCE:}

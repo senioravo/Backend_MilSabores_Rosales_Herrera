@@ -1,0 +1,16 @@
+azure:
+  entra:
+    enabled: false
+
+jwt:
+  secret: test-jwt-secret-milsabores-bff-security-min-32-chars!!
+
+services:
+  usuario:
+    url: http://localhost:8081
+  producto:
+    url: http://localhost:8082
+  carrito:
+    url: http://localhost:8083
+  ventas:
+    url: http://localhost:8084
