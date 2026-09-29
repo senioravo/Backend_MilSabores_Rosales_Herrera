@@ -29,4 +29,35 @@ public class UsuarioClient {
     private UsuarioDTO obtenerPorIdFallback(Long usuarioId, Throwable t) {
         throw new ServicioNoDisponibleException("usuario-service", t);
     }
+
+    @CircuitBreaker(name = "usuario-service", fallbackMethod = "obtenerPerfilMeFallback")
+    @Retry(name = "usuario-service")
+    public UsuarioDTO obtenerPerfilMe(
+            String authProvider,
+            String userEmail,
+            String entraOid,
+            String userName,
+            String legacyUserId) {
+
+        return restClient
+                .get()
+                .uri("/api/usuarios/me")
+                .header("X-Auth-Provider", authProvider != null ? authProvider : "")
+                .header("X-User-Email", userEmail != null ? userEmail : "")
+                .header("X-Entra-Oid", entraOid != null ? entraOid : "")
+                .header("X-User-Name", userName != null ? userName : "")
+                .header("X-User-Id", legacyUserId != null ? legacyUserId : "")
+                .retrieve()
+                .body(UsuarioDTO.class);
+    }
+
+    private UsuarioDTO obtenerPerfilMeFallback(
+            String authProvider,
+            String userEmail,
+            String entraOid,
+            String userName,
+            String legacyUserId,
+            Throwable t) {
+        throw new ServicioNoDisponibleException("usuario-service", t);
+    }
 }

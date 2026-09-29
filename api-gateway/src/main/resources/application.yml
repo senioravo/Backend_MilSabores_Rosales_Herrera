@@ -4,30 +4,11 @@ spring:
   cloud:
     gateway:
       routes:
-        - id: usuario-service
-          uri: ${USUARIO_SERVICE_URL:http://localhost:8081}
-          predicates:
-            - Path=/api/usuarios/**
-        - id: producto-service
-          uri: ${PRODUCTO_SERVICE_URL:http://localhost:8082}
-          predicates:
-            - Path=/api/productos/**
-        - id: categoria-service
-          uri: ${PRODUCTO_SERVICE_URL:http://localhost:8082}
-          predicates:
-            - Path=/api/categorias/**
-        - id: carrito-service
-          uri: ${CARRITO_SERVICE_URL:http://localhost:8083}
-          predicates:
-            - Path=/api/carritos/**
-        - id: ventas-service
-          uri: ${VENTAS_SERVICE_URL:http://localhost:8084}
-          predicates:
-            - Path=/api/ventas/**
-        - id: bff
+        # EP1: el gateway solo enruta al BFF; el BFF orquesta hacia los microservicios.
+        - id: bff-orchestrator
           uri: ${BFF_SERVICE_URL:http://localhost:8085}
           predicates:
-            - Path=/bff/**
+            - Path=/api/**,/bff/**
       # El CORS se resuelve solo aquí. Sin quitar Origin, los servicios aplican
       # su propio CorsConfig (solo localhost): rechazan con 403 los orígenes de
       # producción y duplican Access-Control-Allow-Origin en los de localhost.
@@ -35,12 +16,13 @@ spring:
         - RemoveRequestHeader=Origin
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
       globalcors:
+        # OPTIONS preflight debe responder CORS aunque aún no enrute (guía frontend)
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
             allowedOrigins:
               - "http://localhost:5173"
               - "http://localhost:3000"
-              # Frontend desplegado en Vercel (sobrescribible con FRONTEND_URL)
               - "${FRONTEND_URL:https://dsy-1104-rosales-herrera.vercel.app}"
             allowedMethods:
               - GET
@@ -49,8 +31,14 @@ spring:
               - DELETE
               - PATCH
               - OPTIONS
-            allowedHeaders: "*"
+            allowedHeaders:
+              - Authorization
+              - Content-Type
+              - Accept
+              - Origin
+              - X-Requested-With
             allowCredentials: true
+            maxAge: 3600
 
 server:
   port: 8080
@@ -59,6 +47,14 @@ server:
 # valida la firma, no la genera.
 jwt:
   secret: ${JWT_SECRET:milsabores-secret-key-2024-super-segura-para-produccion-cambiar}
+
+# Microsoft Entra ID — mismo tenant/audience que VITE_AZURE_* en el frontend
+azure:
+  entra:
+    enabled: ${AZURE_ENTRA_ENABLED:false}
+    tenant-id: ${AZURE_TENANT_ID:}
+    client-id: ${AZURE_CLIENT_ID:}
+    audience: ${AZURE_API_AUDIENCE:}
 
 # Rate limiting en memoria (ver RateLimitingFilter) - una unica instancia de
 # gateway, sin Redis.

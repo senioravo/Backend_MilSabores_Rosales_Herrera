@@ -10,9 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * X-User-Id llega inyectado por el JwtAuthenticationFilter del api-gateway
- * una vez validado el token; este controller confia en ese header y no
- * vuelve a parsear el JWT (separacion de responsabilidades Gateway/BFF).
+ * Tras Spring Security en el BFF, {@code /bff/**} exige JWT válido; {@code X-User-Id}
+ * sigue inyectado por el api-gateway para la orquestación checkout.
  */
 @RestController
 @RequestMapping("/bff/checkout")

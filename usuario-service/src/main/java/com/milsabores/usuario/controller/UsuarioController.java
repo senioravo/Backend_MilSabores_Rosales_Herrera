@@ -1,6 +1,7 @@
 package com.milsabores.usuario.controller;
 
 import com.milsabores.usuario.dto.*;
+import com.milsabores.usuario.exception.EntraProfileException;
 import com.milsabores.usuario.service.UsuarioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -55,6 +56,33 @@ public class UsuarioController {
     public ResponseEntity<AuthResponseDTO> login(@Valid @RequestBody UsuarioLoginDTO loginDTO) {
         AuthResponseDTO response = usuarioService.login(loginDTO);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/me")
+    @Operation(
+            summary = "Perfil Neon del usuario Entra",
+            description = "Busca o crea usuario en Neon usando X-User-Email / X-Entra-Oid del api-gateway")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Perfil Neon (id para carrito/checkout)"),
+            @ApiResponse(responseCode = "400", description = "Headers Entra incompletos")
+    })
+    public ResponseEntity<UsuarioResponseDTO> perfilEntra(
+            @RequestHeader(value = "X-Auth-Provider", required = false) String authProvider,
+            @RequestHeader(value = "X-User-Email", required = false) String userEmail,
+            @RequestHeader(value = "X-Entra-Oid", required = false) String entraOid,
+            @RequestHeader(value = "X-User-Name", required = false) String userName,
+            @RequestHeader(value = "X-User-Id", required = false) String legacyUserId) {
+
+        if ("legacy".equalsIgnoreCase(authProvider) && legacyUserId != null && !legacyUserId.isBlank()) {
+            return ResponseEntity.ok(usuarioService.obtenerPorId(Long.parseLong(legacyUserId.trim())));
+        }
+        if (!"entra".equalsIgnoreCase(authProvider)) {
+            throw new EntraProfileException(
+                    "Se requiere sesión Entra (X-Auth-Provider=entra) o JWT legacy con X-User-Id");
+        }
+
+        UsuarioResponseDTO perfil = usuarioService.sincronizarPerfilEntra(userEmail, entraOid, userName);
+        return ResponseEntity.ok(perfil);
     }
 
     @GetMapping("")

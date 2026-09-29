@@ -31,6 +31,10 @@ public class Usuario {
     @Column(name = "email", nullable = false, unique = true, length = 100)
     private String email;
 
+    /** Object ID de Microsoft Entra (enlace EP1 MSAL ↔ fila Neon). */
+    @Column(name = "entra_oid", unique = true, length = 36)
+    private String entraOid;
+
     @NotBlank(message = "La contraseña es obligatoria")
     @Size(min = 6, message = "La contraseña debe tener al menos 6 caracteres")
     @Column(name = "password", nullable = false, length = 255)

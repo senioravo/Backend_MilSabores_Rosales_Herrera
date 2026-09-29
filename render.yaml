@@ -126,6 +126,15 @@ services:
         value: https://milsabores-carrito-service.onrender.com
       - key: VENTAS_SERVICE_URL
         value: https://milsabores-ventas-service.onrender.com
+      # Entra ID (EP1): mismos valores que api-gateway (Dashboard sync: false)
+      - key: AZURE_ENTRA_ENABLED
+        value: "true"
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_API_AUDIENCE
+        sync: false
 
   # Punto de entrada público: el frontend (Vercel) debe apuntar a esta URL.
   - type: web
@@ -152,3 +161,12 @@ services:
         value: https://milsabores-ventas-service.onrender.com
       - key: BFF_SERVICE_URL
         value: https://milsabores-bff.onrender.com
+      # Entra ID (EP1 B6): configurar valores reales en Render Dashboard (sync: false)
+      - key: AZURE_ENTRA_ENABLED
+        value: "true"
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_API_AUDIENCE
+        sync: false

@@ -84,11 +84,11 @@
 - **Servicios en Background:** 4 JARs ejecutándose con `nohup`
 
 ### 🗄️ Neon PostgreSQL Cloud
-- **Host:** `ep-noisy-glade-acnt8zv8-pooler.sa-east-1.aws.neon.tech`
+- **Host:** `TU-HOST-NEON.aws.neon.tech` (ver panel Neon; no documentar en Git)
 - **Puerto:** 5432 (SSL/TLS requerido)
 - **Base de Datos:** `neondb`
-- **Usuario:** `neondb_owner`
-- **Password:** `npg_5CjH6VAeioaF`
+- **Usuario:** valor de `DATABASE_USERNAME` en tu `.env` local
+- **Password:** valor de `DATABASE_PASSWORD` en tu `.env` local (nunca en el repositorio)
 - **Región:** AWS São Paulo (sa-east-1)
 - **Connection Pooling:** PgBouncer integrado
 - **Características:**
@@ -2097,10 +2097,10 @@ VITE_API_MODE=production
 
 **Backend (EC2 environment):**
 ```bash
-export DATABASE_URL="jdbc:postgresql://ep-noisy-glade-acnt8zv8-pooler.sa-east-1.aws.neon.tech:5432/neondb?sslmode=require"
-export DATABASE_USERNAME="neondb_owner"
-export DATABASE_PASSWORD="npg_5CjH6VAeioaF"
-export JWT_SECRET="milsabores-secret-key-2024-super-segura-para-produccion-cambiar"
+export DATABASE_URL="jdbc:postgresql://TU-HOST-NEON.aws.neon.tech:5432/neondb?sslmode=require"
+export DATABASE_USERNAME="tu-usuario-neon"
+export DATABASE_PASSWORD="tu-password-neon"
+export JWT_SECRET="tu-jwt-secret-local-no-subir-a-git"
 
 # Ejecutar con variables
 java -jar -DDATABASE_URL=$DATABASE_URL -DJWT_SECRET=$JWT_SECRET usuario-service.jar
