@@ -1,0 +1,76 @@
+# ============================================================
+#  Mil Sabores - despliegue en una EC2 t3.medium (AWS Academy)
+#
+#  t3.medium = 4 GB de RAM y 2 vCPU con créditos, así que:
+#  - Se omite el bff (el frontend no lo usa) y quedan 5 JVMs.
+#  - Cada JVM tiene heap y metaspace acotados (JAVA_OPTS): ~450 MB
+#    por servicio, ~2,3 GB en total.
+#  - Los 4 servicios de datos arrancan en paralelo; el gateway espera
+#    a que estén healthy.
+#  - Solo el gateway publica su puerto; el resto queda en la red interna.
+#  - La instancia lleva swap (ec2-setup.sh) como margen de memoria.
+#
+#  En una t3.small (2 GB), definir en .env:
+#    EC2_JAVA_OPTS=-Xms64m -Xmx160m -XX:MaxMetaspaceSize=140m -XX:ReservedCodeCacheSize=40m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError
+#
+#  Las imágenes se construyen en el PC y se copian a la EC2:
+#    .\scripts\ec2\deploy-ec2.ps1 -Ip <IP-elástica> -Key labsuser.pem -Up
+#  Paso a paso: docs/DEPLOY.md, sección 4.
+# ============================================================
+
+x-spring-service: &spring-service
+  restart: unless-stopped
+  env_file: .env
+  networks: [milsabores]
+  environment: &jvm
+    JAVA_OPTS: "${EC2_JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=64m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError}"
+  # Con 4 JVMs arrancando a la vez en 2 vCPU, el arranque supera el
+  # start-period de 90 s del Dockerfile
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://localhost:$${PORT}/actuator/health > /dev/null || exit 1"]
+    interval: 20s
+    timeout: 5s
+    start_period: 240s
+    retries: 5
+
+services:
+  usuario-service:
+    <<: *spring-service
+    build: ./usuario-service
+    image: milsabores/usuario-service:latest
+
+  producto-service:
+    <<: *spring-service
+    build: ./producto-service
+    image: milsabores/producto-service:latest
+
+  carrito-service:
+    <<: *spring-service
+    build: ./carrito-service
+    image: milsabores/carrito-service:latest
+
+  ventas-service:
+    <<: *spring-service
+    build: ./ventas-service
+    image: milsabores/ventas-service:latest
+
+  api-gateway:
+    <<: *spring-service
+    build: ./api-gateway
+    image: milsabores/api-gateway:latest
+    ports: ["8080:8080"]
+    environment:
+      <<: *jvm
+      USUARIO_SERVICE_URL: http://usuario-service:8081
+      PRODUCTO_SERVICE_URL: http://producto-service:8082
+      CARRITO_SERVICE_URL: http://carrito-service:8083
+      VENTAS_SERVICE_URL: http://ventas-service:8084
+    depends_on:
+      usuario-service: { condition: service_healthy }
+      producto-service: { condition: service_healthy }
+      carrito-service: { condition: service_healthy }
+      ventas-service: { condition: service_healthy }
+
+networks:
+  milsabores:
+    driver: bridge

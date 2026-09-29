@@ -74,3 +74,6 @@ dist/
 
 # Kubernetes: Secret con credenciales reales (usar k8s/secret.example.yaml como plantilla)
 k8s/secret.yaml
+
+# Imágenes exportadas por scripts/ec2/deploy-ec2.ps1
+milsabores-images.tar
