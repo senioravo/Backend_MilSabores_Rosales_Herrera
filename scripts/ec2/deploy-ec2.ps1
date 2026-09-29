@@ -27,6 +27,7 @@ $Images = @(
     "milsabores/producto-service:latest",
     "milsabores/carrito-service:latest",
     "milsabores/ventas-service:latest",
+    "milsabores/bff:latest",
     "milsabores/api-gateway:latest"
 )
 $Target = "$User@$Ip"
@@ -66,8 +67,8 @@ try {
 
     # ---------- Compilar y exportar ----------
     if (-not $SkipBuild) {
-        # De a una: 5 builds de Gradle en paralelo pueden colgar el Docker local
-        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "api-gateway") {
+        # De a una: 6 builds de Gradle en paralelo pueden colgar el Docker local
+        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway") {
             Invoke-Step "Compilando $Service (varios minutos la primera vez)" {
                 docker compose -f $ComposeFile build $Service
             }
