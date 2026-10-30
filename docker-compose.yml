@@ -9,6 +9,10 @@
 #  Bajar:     docker compose down
 #
 #  Punto de entrada: http://localhost:8080 (api-gateway)
+#
+#  RabbitMQ local (EP2), dos nodos del mismo clúster:
+#    rabbit1  AMQP 5672   web http://localhost:15672
+#    rabbit2  AMQP 5673   web http://localhost:15673
 # ============================================================
 
 x-spring-service: &spring-service
@@ -71,6 +75,61 @@ services:
     depends_on:
       bff: { condition: service_healthy }
 
+  # Nodo 1 del clúster. Los servicios Java todavía no publican aquí.
+  rabbit1:
+    image: rabbitmq:4.2-management
+    hostname: rabbit1
+    container_name: rabbit1
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-milsabores-erlang-cookie}
+    volumes:
+      - rabbit1_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks: [milsabores]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  # Nodo 2. Mismos secreto y configuración. Puertos distintos en Windows
+  # porque 5672 y 15672 ya los usa rabbit1.
+  rabbit2:
+    image: rabbitmq:4.2-management
+    hostname: rabbit2
+    container_name: rabbit2
+    restart: unless-stopped
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-milsabores-erlang-cookie}
+    volumes:
+      - rabbit2_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks: [milsabores]
+    depends_on:
+      rabbit1: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
 networks:
   milsabores:
     driver: bridge
+
+volumes:
+  rabbit1_data:
+  rabbit2_data:
