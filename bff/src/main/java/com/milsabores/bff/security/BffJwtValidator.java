@@ -96,7 +96,15 @@ public class BffJwtValidator {
             throw new JwtException("Token expirado");
         }
         SecurityContextHolder.getContext()
-                .setAuthentication(new BffAuthenticationToken(claims.getSubject(), "legacy", null));
+                .setAuthentication(new BffAuthenticationToken(claims.getSubject(), "legacy", rolesDe(claims)));
+    }
+
+    private static String rolesDe(Claims claims) {
+        Object rolesClaim = claims.get("roles");
+        if (rolesClaim instanceof String text && !text.isBlank()) {
+            return text.trim();
+        }
+        return null;
     }
 
     private SecretKey getSigningKey() {

@@ -17,6 +17,8 @@ services:
     url: ${CARRITO_SERVICE_URL:http://localhost:8083}
   ventas:
     url: ${VENTAS_SERVICE_URL:http://localhost:8084}
+  admin:
+    url: ${RABBIT_ADMIN_SERVICE_URL:http://localhost:8086}
 
 springdoc:
   api-docs:

@@ -145,6 +145,10 @@ Navegador → Vercel (/api/* proxy) → http://<IP-elástica>:8080 (api-gateway 
    |--------|--------|--------|
    | 22 | Mi IP | SSH |
    | 8080 | 0.0.0.0/0 | api-gateway (lo llaman las funciones de Vercel) |
+   | 15672 | Mi IP | Management UI de rabbit1. No abrirla a 0.0.0.0/0 |
+   | 15673 | Mi IP | Management UI de rabbit2. No abrirla a 0.0.0.0/0 |
+
+   El AMQP (5672) no se publica en la instancia. producto y ventas llegan a `rabbit1:5672` y `rabbit2:5672` por la red de Docker.
 
 4. Asignar una **IP elástica** y asociarla a la instancia. La instancia se detiene cuando termina la sesión del lab; sin IP elástica, la IP pública cambia en cada arranque y habría que actualizar Vercel.
 
@@ -182,9 +186,9 @@ Requisitos: Rancher Desktop o Docker Desktop corriendo, `.env` en la raíz del b
 
 El script:
 1. Ajusta los permisos de `labsuser.pem` (OpenSSH en Windows rechaza llaves con permisos abiertos), prueba la conexión SSH y ejecuta la fase 2.
-2. Compila las 5 imágenes con `docker-compose.ec2.yml`.
+2. Compila las imágenes con `docker-compose.ec2.yml`, incluida `rabbit-topology` (declara las colas y termina).
 3. Las exporta a `milsabores-images.tar`.
-4. Sube a `~/milsabores` en la EC2: las imágenes, `docker-compose.ec2.yml`, `.env` y `ec2-up.sh`.
+4. Sube a `~/milsabores` en la EC2: las imágenes, `docker-compose.ec2.yml`, `.env`, `ec2-up.sh` y `infra/rabbitmq/rabbitmq.conf`. Sin ese `.conf` los dos nodos no se ven.
 5. Borra el `.tar` local.
 
 Opciones:
@@ -225,6 +229,24 @@ curl http://<IP-elástica>:8080/actuator/health
 curl -X POST http://<IP-elástica>:8080/api/usuarios/login \
   -H "Content-Type: application/json" -d '{"email":"x@x.cl","password":"x"}'   # debe dar 401
 ```
+
+### RabbitMQ en la EC2 (P3)
+
+Es el mismo clúster que en local: nodos `rabbit@rabbit1` y `rabbit@rabbit2`, imagen `rabbitmq:4.2-management`, la misma cookie (`RABBITMQ_ERLANG_COOKIE` en `.env`, por defecto `milsabores-erlang-cookie`) y el mismo `infra/rabbitmq/rabbitmq.conf`. La cookie es el secreto entre los nodos. No es la clave de la web.
+
+`docker-compose.ec2.yml` publica solo la web. Al terminar `ec2-up.sh` imprime `rabbitmqctl cluster_status`. Tienen que aparecer los dos nodos.
+
+| Qué | Dónde |
+|-----|--------|
+| Web de rabbit1 | `http://<IP-elástica>:15672` |
+| Web de rabbit2 | `http://<IP-elástica>:15673` |
+| Usuario | `admin` (o `RABBITMQ_USER` del `.env`) |
+| Clave | `admin123` (o `RABBITMQ_PASSWORD` del `.env`) |
+| Colas | las seis `pedido.*` cuando el contenedor `rabbit-topology` quedó en Exited (0) |
+
+En Overview, el clúster muestra 2 nodos. En Queues, las seis colas. Si la web no carga, la regla del Security Group sigue en "My IP" de otra red: editar 15672 y 15673 igual que el puerto 22.
+
+No hace falta abrir el 5672. Un `.env` con `RABBITMQ_ADDRESSES=localhost:...` no afecta a los contenedores: el compose de la EC2 les pone `rabbit1:5672,rabbit2:5672`.
 
 ### Operación y problemas frecuentes
 

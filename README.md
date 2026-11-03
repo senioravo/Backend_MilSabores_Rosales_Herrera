@@ -71,6 +71,82 @@ Cada microservicio sigue las capas Controller → Service → Repository → Ent
 - Verifica precio y stock contra producto-service antes de crear la venta
 - Circuit breaker (Resilience4j) hacia cada microservicio y reintentos solo en lecturas (GET), para no duplicar ventas ni pagos
 
+## Mensajería con RabbitMQ (EP2)
+
+El checkout no descuenta el stock dentro del mismo request. Ventas guarda la venta y, recién cuando esa transacción hizo commit, publica un comando. Producto lo consume, descuenta y confirma. Notificación y auditoría se enteran por un evento, no por una llamada HTTP.
+
+El clúster son dos nodos del mismo broker, no dos colas: `rabbit@rabbit1` y `rabbit@rabbit2`. Localmente viven en `docker-compose.yml`. En la EC2 están en `docker-compose.ec2.yml` (el acceso quedó en `docs/DEPLOY.md`). Los dos leen `infra/rabbitmq/rabbitmq.conf` y la misma `RABBITMQ_ERLANG_COOKIE`. La cookie une los nodos. La web se abre con `admin` / `admin123`.
+
+| Dónde | AMQP | Management UI |
+|-------|------|----------------|
+| Local, desde el PC | `localhost:5672` y `localhost:5673` | http://localhost:15672 y http://localhost:15673 |
+| Dentro de Compose | `rabbit1:5672,rabbit2:5672` | — |
+| EC2 | solo la red Docker | `http://<IP-elástica>:15672` y `:15673` (Security Group: My IP) |
+
+### Topología (`rabbit-topology`)
+
+Los nombres están en `RabbitTopologyNames`. `RabbitTopologyConfig` declara exchanges, colas y bindings. `RabbitTopologyApplication` arranca, declara y se cierra. En la EC2 eso lo hace el contenedor `rabbit-topology`, que termina al declarar.
+
+| Exchange | Tipo | Clave o patrón | Cola |
+|----------|------|----------------|------|
+| `milsabores.direct` | direct | `pedido.stock.descontar` | `pedido.stock` |
+| `milsabores.topic` | topic | `pedido.stock.*` | `pedido.notificacion` |
+| `milsabores.topic` | topic | `pedido.#` | `pedido.auditoria` |
+| `milsabores.dlx` | direct | el nombre de cada DLQ | `pedido.stock.dlq`, `pedido.notificacion.dlq`, `pedido.auditoria.dlq` |
+
+Direct exige la clave exacta. En topic, `*` es una palabra y `#` es cero o más. Por eso `pedido.stock.descontado` entra a notificación y a auditoría. El exchange no guarda mensajes.
+
+Las colas de trabajo son durables, con TTL de 60 segundos y máximo 100 mensajes. Si el mensaje muere, va a `milsabores.dlx` y de ahí a su DLQ. Cada DLQ dura 24 horas, admite 200 mensajes y no tiene DLX: ahí se queda.
+
+El comando y el evento llevan `ventaId` y la lista de ítems (`productoCode`, `cantidad`). No llevan precios ni datos de pago.
+
+### Quién publica y quién consume
+
+1. El BFF crea la venta y sigue con Transbank. No espera a que baje el stock.
+2. `VentaServiceImpl` registra el envío en `afterCommit`. `StockCommandPublisher` manda `StockDescontarCommand` a `milsabores.direct` con la clave `pedido.stock.descontar`.
+3. `StockCommandConsumer` (cola `pedido.stock`) llama a `ProductoService.reducirStockDeVenta`. El ACK es manual y va solo si el descuento quedó hecho. Un error de base de datos se reintenta hasta 3 veces. Un producto inexistente, un dato inválido o los reintentos agotados hacen NACK sin requeue, y el mensaje pasa a `pedido.stock.dlq`.
+4. Después del ACK, `StockEventPublisher` publica `StockDescontadoEvent` en `milsabores.topic` con la clave `pedido.stock.descontado`. Si esa publicación falla, no se niega el comando que ya se confirmó.
+5. `NotificacionPedidoListener` y `AuditoriaPedidoListener` confirman con ACK. No son otros microservicios: corren en el mismo proceso de producto.
+6. `StockDlqListener`, `NotificacionDlqListener` y `AuditoriaDlqListener` leen el mensaje crudo, dejan en el log el cuerpo y el motivo (`rejected` o `expired`) y hacen ACK. `MensajeNoProcesado` arma ese texto.
+
+### Administrador (`rabbit-admin`, puerto 8086)
+
+REST para crear y borrar colas, exchanges y bindings. Un nombre vacío, un nombre que parte con `amq.`, un tipo de exchange inválido o una routing key vacía responde 400 y no declara nada en el broker.
+
+El gateway enruta `/api/admin/**` al BFF antes que el resto de `/api/**`. El BFF vuelve a validar el JWT y exige el rol `ADMIN`. Sin token o con un token malo responde 401. Un usuario que no es admin responde 403. El BFF reenvía la llamada a `rabbit-admin`. El gateway no habla con ese servicio directo.
+
+| Método | Ruta | Resultado |
+|--------|------|-----------|
+| POST | `/api/admin/colas` | 201 |
+| DELETE | `/api/admin/colas/{nombre}` | 204 |
+| POST | `/api/admin/exchanges` | 201 |
+| DELETE | `/api/admin/exchanges/{nombre}` | 204 |
+| POST | `/api/admin/bindings` | 201 |
+| DELETE | `/api/admin/bindings` | 204, el cuerpo va en el body |
+
+En la Management UI, **All queues** son las colas activas. **Ready** son los mensajes que esperan consumidor. **Unacked** ya se entregaron y todavía no hay ACK. **Total** es la suma. Con producto arriba, cada cola de las seis tiene un consumidor. El Ready de cada `*.dlq` es cuántos mensajes muertos hay ahí. Unas 150 en una DLQ se revisan (cuerpo y motivo); no se borra la cola para esconderlos.
+
+### Archivos que entraron con esta etapa
+
+Nuevos:
+
+- `infra/rabbitmq/rabbitmq.conf`
+- `rabbit-topology/` (`RabbitTopologyNames`, `RabbitTopologyConfig`, `StockDescontarCommand`, `StockDescontadoEvent`, `Dockerfile`)
+- `rabbit-admin/` (controlador `/api/admin`, `RabbitAdminService`, pruebas)
+- `producto-service`: `ProductoRabbitConfig`, `StockCommandConsumer`, `StockEventPublisher`, `StockDlqListener`, `NotificacionPedidoListener`, `NotificacionDlqListener`, `AuditoriaPedidoListener`, `AuditoriaDlqListener`, `MensajeNoProcesado`
+- `ventas-service`: `VentasRabbitConfig`, `StockCommandPublisher`
+
+Cambiados para enganchar eso:
+
+- `ventas-service/.../VentaServiceImpl.java` publica después del commit
+- `producto-service/.../ProductoService.java` descuenta todas las líneas de la venta en una transacción
+- `producto-service/.../ProductoServiceApplication.java` también escanea notificación y auditoría
+- `api-gateway/.../application.yml` ruta `admin-api`
+- `bff`: `BffSecurityConfig`, `BffAuthenticationToken`, `BffJwtValidator`, `DownstreamApiProxy`
+- `docker-compose.yml`, `docker-compose.ec2.yml`, `.env.example`
+- `scripts/ec2/deploy-ec2.ps1`, `scripts/ec2/ec2-up.sh`
+- `docs/DEPLOY.md`, `docs/OPERACION-EC2.md`
+
 ## 🗄️ Base de Datos
 
 **PostgreSQL en Neon**
@@ -101,6 +177,10 @@ Se leen del archivo `.env` (copiar `.env.example`) o de variables de entorno. Nu
 | `JWT_SECRET` | usuario-service, api-gateway | Debe ser el mismo en ambos |
 | `*_SERVICE_URL` | api-gateway, bff | URLs de los microservicios (por defecto `localhost`) |
 | `FRONTEND_URL` | api-gateway | Origen permitido por CORS |
+| `RABBITMQ_ADDRESSES` | producto, ventas, rabbit-admin, rabbit-topology | En Compose: `rabbit1:5672,rabbit2:5672`. En el PC, fuera de Docker: `localhost:5672,localhost:5673` |
+| `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | los mismos y la Management UI | Por defecto `admin` / `admin123` |
+| `RABBITMQ_ERLANG_COOKIE` | rabbit1 y rabbit2 | Secreto para que los nodos formen el clúster. No es la clave de la web |
+| `RABBIT_ADMIN_SERVICE_URL` | bff | A dónde reenvía `/api/admin`. Por defecto `http://localhost:8086` |
 
 ### Configuración de Neon PostgreSQL
 
@@ -110,6 +190,8 @@ Se leen del archivo `.env` (copiar `.env.example`) o de variables de entorno. Nu
 4. Ejecutar el script `database/schema.sql` en la base de datos
 
 ## 📦 Estructura del Repositorio
+
+El frontend es el otro repositorio. Dentro de este backend, cada pieza que se entrega por separado tiene su propio `README.md`: `bff/` (BFF), `ventas-service/` (microservicio principal), `producto-service/` (catálogo) y `rabbit-admin/` (administrador de RabbitMQ).
 
 ```
 Backend_MilSabores_Rosales_Herrera/
@@ -129,7 +211,10 @@ Backend_MilSabores_Rosales_Herrera/
 │   └── Dockerfile
 ├── producto-service/       # [misma estructura]
 ├── carrito-service/        # [misma estructura]
-├── ventas-service/         # [misma estructura]
+├── ventas-service/         # [misma estructura] + publicación del comando de stock
+├── rabbit-topology/        # Exchanges, colas, bindings, comando y evento
+├── rabbit-admin/           # REST para crear y borrar colas, exchanges y bindings
+├── infra/rabbitmq/         # rabbitmq.conf: los dos nodos se descubren al partir
 ├── k8s/                    # Manifiestos de Kubernetes (kustomize)
 ├── database/schema.sql     # Script de creación de BD
 ├── docs/                   # Documentación (arquitectura, endpoints, despliegue)
@@ -243,6 +328,19 @@ GET    /bff/checkout/resumen          - Resumen del carrito con precio y stock v
 POST   /bff/checkout                  - Crea la venta desde el carrito e inicia el pago
 ```
 
+### Administrador RabbitMQ (http://localhost:8086, también por el gateway)
+
+Pasan por `http://localhost:8080/api/admin/**` con un JWT de rol `ADMIN`. Crear responde 201 y borrar responde 204.
+
+```
+POST   /api/admin/colas
+DELETE /api/admin/colas/{nombre}
+POST   /api/admin/exchanges
+DELETE /api/admin/exchanges/{nombre}
+POST   /api/admin/bindings
+DELETE /api/admin/bindings
+```
+
 ## 📚 Documentación API (Swagger)
 
 - Usuario Service: http://localhost:8081/swagger-ui.html
@@ -265,10 +363,10 @@ Todos los servicios exponen Spring Boot Actuator:
 
 La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 
-- **Docker Compose**: `docker-compose.yml` levanta los 6 servicios en local.
+- **Docker Compose**: `docker-compose.yml` levanta los microservicios y el clúster RabbitMQ (`rabbit1`, `rabbit2`) en local.
 - **Kubernetes**: `kubectl apply -k k8s/` (namespace, ConfigMap, Deployments, Services, Ingress).
 - **Render**: Blueprint `render.yaml` (6 Web Services Docker).
-- **AWS EC2**: ejecutar cada JAR, o su imagen Docker, con las variables de entorno de la tabla anterior.
+- **AWS EC2**: `docker-compose.ec2.yml` levanta el mismo clúster (`rabbit1`, `rabbit2`). La web queda en los puertos 15672 y 15673. Paso a paso en `docs/DEPLOY.md`.
 
 ## 🔧 Tecnologías Utilizadas
 
@@ -278,6 +376,7 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 - **Spring Security + JWT** (jjwt 0.12.3)
 - **Spring Data JPA** + **PostgreSQL** (Neon)
 - **Resilience4j 2.2.0** (circuit breaker y retry)
+- **Spring AMQP** y **RabbitMQ 4.2** (clúster de dos nodos, ACK manual, DLQ)
 - **Spring Boot Actuator**
 - **SpringDoc OpenAPI 2.7.0** (Swagger)
 - **Lombok**
@@ -309,6 +408,10 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 - [x] Dockerizar los microservicios
 - [x] Manifiestos de Kubernetes
 - [x] Blueprint de despliegue en Render
+- [x] Clúster RabbitMQ local (rabbit1 y rabbit2) y el mismo clúster en `docker-compose.ec2.yml`
+- [x] Comando de stock por exchange direct y evento por exchange topic
+- [x] ACK manual, reintentos acotados y tres DLQ
+- [x] `rabbit-admin` protegido por el gateway y el rol ADMIN en el BFF
 
 ### Pendiente
 - [ ] Integrar validación JWT de Azure IDaaS

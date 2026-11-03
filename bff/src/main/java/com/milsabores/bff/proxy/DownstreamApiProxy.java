@@ -29,17 +29,20 @@ public class DownstreamApiProxy {
     private final String productoBase;
     private final String carritoBase;
     private final String ventasBase;
+    private final String adminBase;
     private final RestClient restClient;
 
     public DownstreamApiProxy(
             @Value("${services.usuario.url}") String usuarioBase,
             @Value("${services.producto.url}") String productoBase,
             @Value("${services.carrito.url}") String carritoBase,
-            @Value("${services.ventas.url}") String ventasBase) {
+            @Value("${services.ventas.url}") String ventasBase,
+            @Value("${services.admin.url}") String adminBase) {
         this.usuarioBase = trimTrailingSlash(usuarioBase);
         this.productoBase = trimTrailingSlash(productoBase);
         this.carritoBase = trimTrailingSlash(carritoBase);
         this.ventasBase = trimTrailingSlash(ventasBase);
+        this.adminBase = trimTrailingSlash(adminBase);
         this.restClient = RestClient.create();
     }
 
@@ -70,6 +73,9 @@ public class DownstreamApiProxy {
     }
 
     private String resolveBaseUrl(String path) {
+        if (path.startsWith("/api/admin")) {
+            return adminBase;
+        }
         if (path.startsWith("/api/usuarios")) {
             return usuarioBase;
         }
@@ -110,7 +116,8 @@ public class DownstreamApiProxy {
     private static boolean allowsBody(HttpMethod method) {
         return method == HttpMethod.POST
                 || method == HttpMethod.PUT
-                || method == HttpMethod.PATCH;
+                || method == HttpMethod.PATCH
+                || method == HttpMethod.DELETE;
     }
 
     private static String trimTrailingSlash(String url) {

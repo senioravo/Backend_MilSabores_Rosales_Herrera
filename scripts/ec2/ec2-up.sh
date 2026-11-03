@@ -3,8 +3,8 @@
 #  Fase 4 - levanta el backend en la EC2 (se ejecuta EN la instancia)
 #
 #  Espera en la misma carpeta (la sube deploy-ec2.ps1):
-#    docker-compose.ec2.yml, .env y, si hay imágenes nuevas,
-#    milsabores-images.tar
+#    docker-compose.ec2.yml, .env, infra/rabbitmq/rabbitmq.conf y,
+#    si hay imágenes nuevas, milsabores-images.tar
 #
 #  Uso:  bash ~/milsabores/ec2-up.sh
 # ============================================================
@@ -23,6 +23,7 @@ command -v docker > /dev/null || { echo "ERROR: Docker no está instalado (ver f
 docker info > /dev/null 2>&1 || { echo "ERROR: sin acceso a Docker. ¿Falta 'sudo usermod -aG docker \$USER' y volver a entrar?"; exit 1; }
 [ -f "$COMPOSE_FILE" ] || { echo "ERROR: falta $COMPOSE_FILE en $(pwd)."; exit 1; }
 [ -f .env ] || { echo "ERROR: falta .env en $(pwd)."; exit 1; }
+[ -f infra/rabbitmq/rabbitmq.conf ] || { echo "ERROR: falta infra/rabbitmq/rabbitmq.conf. Sin ese archivo rabbit1 y rabbit2 no forman el clúster."; exit 1; }
 chmod 600 .env
 
 if ! swapon --show | grep -q .; then
@@ -64,6 +65,9 @@ echo
 compose ps
 echo
 echo "==> Health: $(curl -s http://localhost:8080/actuator/health)"
+echo
+echo "==> Clúster RabbitMQ"
+compose exec -T rabbit1 rabbitmqctl cluster_status || echo "AVISO: no se pudo leer el clúster. Revisar logs de rabbit1 y rabbit2."
 echo
 free -h
 echo

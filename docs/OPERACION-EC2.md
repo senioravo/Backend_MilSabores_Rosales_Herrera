@@ -9,6 +9,8 @@ Guía rápida para el día a día del despliegue en AWS Academy. La instalación
 | Instancia | EC2 t3.medium, Ubuntu, en el Learner Lab (`us-east-1`) |
 | IP elástica | `184.195.13.200` |
 | Backend (api-gateway) | `http://184.195.13.200:8080` |
+| RabbitMQ rabbit1 | `http://184.195.13.200:15672` (usuario `admin`, clave la de `RABBITMQ_PASSWORD`) |
+| RabbitMQ rabbit2 | `http://184.195.13.200:15673` |
 | Llave SSH | `C:\Users\diego\Downloads\MilSabores.pem` (no `labsuser.pem`) |
 | Frontend | `https://dsy-1104-rosales-herrera.vercel.app` |
 | Variable en Vercel | `BACKEND_URL = http://184.195.13.200:8080` |
@@ -129,5 +131,8 @@ ssh -i /c/Users/diego/Downloads/MilSabores.pem ubuntu@184.195.13.200
 cd ~/milsabores
 docker compose -f docker-compose.ec2.yml ps                          # estado de los servicios
 docker compose -f docker-compose.ec2.yml logs --tail=100 usuario-service
+docker compose -f docker-compose.ec2.yml exec rabbit1 rabbitmqctl cluster_status
 free -h                                                              # memoria y swap
 ```
+
+La web del clúster es `http://184.195.13.200:15672` y `:15673`. Si no abre, en el Security Group los puertos 15672 y 15673 tienen que permitir **My IP**, igual que el 22. El usuario es `admin`.

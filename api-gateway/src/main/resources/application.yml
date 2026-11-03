@@ -4,6 +4,11 @@ spring:
   cloud:
     gateway:
       routes:
+        # EP2: administrar Rabbit solo entra por el BFF, que exige el rol ADMIN.
+        - id: admin-api
+          uri: ${BFF_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/admin/**
         # EP1: el gateway solo enruta al BFF; el BFF orquesta hacia los microservicios.
         - id: bff-orchestrator
           uri: ${BFF_SERVICE_URL:http://localhost:8085}

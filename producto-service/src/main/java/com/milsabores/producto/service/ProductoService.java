@@ -10,6 +10,7 @@ import com.milsabores.producto.model.Producto;
 import com.milsabores.producto.model.Categoria;
 import com.milsabores.producto.repository.ProductoRepository;
 import com.milsabores.producto.repository.CategoriaRepository;
+import com.milsabores.rabbit.StockDescontarCommand;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -245,6 +246,19 @@ public class ProductoService {
         producto.setStock(nuevoStock);
         Producto updatedProducto = productoRepository.save(producto);
         return convertToResponseDTO(updatedProducto);
+    }
+
+    /**
+     * Descuenta todas las líneas de una venta en la misma transacción.
+     * Si una línea falla, no queda descontada solo una parte del pedido.
+     */
+    public void reducirStockDeVenta(StockDescontarCommand command) {
+        if (command.items() == null || command.items().isEmpty()) {
+            throw new IllegalArgumentException("El comando no trae productos para descontar");
+        }
+        for (StockDescontarCommand.Item item : command.items()) {
+            reducirStock(item.productoCode(), item.cantidad());
+        }
     }
 
     /**

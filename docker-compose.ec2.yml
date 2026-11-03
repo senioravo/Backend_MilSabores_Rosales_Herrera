@@ -6,9 +6,12 @@
 #    solo enruta al bff).
 #  - Cada JVM tiene heap y metaspace acotados (JAVA_OPTS): ~450 MB
 #    por servicio, ~2,7 GB en total.
-#  - Los 4 servicios de datos arrancan en paralelo; el bff espera a
-#    que estén healthy y el gateway espera al bff.
-#  - Solo el gateway publica su puerto; el resto queda en la red interna.
+#  - usuario y carrito arrancan ya. producto y ventas esperan a que
+#    rabbit-topology declare las colas. El bff espera a los cuatro.
+#  - Solo el gateway publica su puerto; el resto de Java queda en la red interna.
+#  - RabbitMQ (EP2, P3): rabbit1 y rabbit2, el mismo clúster que en local.
+#    La web se publica en 15672 y 15673. El AMQP no sale de la red Docker.
+#  - rabbit-topology declara las seis colas y se apaga. No se queda corriendo.
 #  - La instancia lleva swap (ec2-setup.sh) como margen de memoria.
 #
 #  En una t3.small (2 GB), definir en .env:
@@ -44,6 +47,13 @@ services:
     <<: *spring-service
     build: ./producto-service
     image: milsabores/producto-service:latest
+    environment:
+      <<: *jvm
+      RABBITMQ_ADDRESSES: rabbit1:5672,rabbit2:5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
+    depends_on:
+      rabbit-topology: { condition: service_completed_successfully }
 
   carrito-service:
     <<: *spring-service
@@ -54,6 +64,13 @@ services:
     <<: *spring-service
     build: ./ventas-service
     image: milsabores/ventas-service:latest
+    environment:
+      <<: *jvm
+      RABBITMQ_ADDRESSES: rabbit1:5672,rabbit2:5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
+    depends_on:
+      rabbit-topology: { condition: service_completed_successfully }
 
   # EP1: el gateway enruta /api/** y /bff/** al bff, que orquesta los servicios
   bff:
@@ -87,6 +104,75 @@ services:
     depends_on:
       bff: { condition: service_healthy }
 
+  # Mismo clúster que docker-compose.yml. La cookie y rabbitmq.conf
+  # tienen que ser los del repositorio: si la cookie cambia, el nodo
+  # no entra al clúster. AMQP queda en la red interna (rabbit1:5672).
+  rabbit1:
+    image: rabbitmq:4.2-management
+    hostname: rabbit1
+    container_name: rabbit1
+    restart: unless-stopped
+    ports:
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-milsabores-erlang-cookie}
+    volumes:
+      - rabbit1_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks: [milsabores]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  rabbit2:
+    image: rabbitmq:4.2-management
+    hostname: rabbit2
+    container_name: rabbit2
+    restart: unless-stopped
+    ports:
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-milsabores-erlang-cookie}
+    volumes:
+      - rabbit2_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks: [milsabores]
+    depends_on:
+      rabbit1: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  # Declara exchanges, colas y DLQ, y termina. En un volumen nuevo
+  # (la EC2 parte vacía) sin esto el clúster queda sin las seis colas.
+  rabbit-topology:
+    build: ./rabbit-topology
+    image: milsabores/rabbit-topology:latest
+    restart: "no"
+    env_file: .env
+    environment:
+      RABBITMQ_ADDRESSES: rabbit1:5672,rabbit2:5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
+      JAVA_OPTS: "-Xms64m -Xmx128m -XX:+ExitOnOutOfMemoryError"
+    networks: [milsabores]
+    depends_on:
+      rabbit2: { condition: service_healthy }
+
 networks:
   milsabores:
     driver: bridge
+
+volumes:
+  rabbit1_data:
+  rabbit2_data:

@@ -29,7 +29,7 @@ public class BffAuthenticationToken extends AbstractAuthenticationToken {
         return Arrays.stream(rolesCsv.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
+                .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase()))
                 .collect(Collectors.toList());
     }
 

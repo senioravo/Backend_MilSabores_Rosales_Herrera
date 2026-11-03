@@ -14,3 +14,5 @@ services:
     url: http://localhost:8083
   ventas:
     url: http://localhost:8084
+  admin:
+    url: http://localhost:8086

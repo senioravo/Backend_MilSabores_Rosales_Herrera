@@ -28,7 +28,8 @@ $Images = @(
     "milsabores/carrito-service:latest",
     "milsabores/ventas-service:latest",
     "milsabores/bff:latest",
-    "milsabores/api-gateway:latest"
+    "milsabores/api-gateway:latest",
+    "milsabores/rabbit-topology:latest"
 )
 $Target = "$User@$Ip"
 $SshOpts = @("-i", $Key, "-o", "StrictHostKeyChecking=accept-new")
@@ -68,7 +69,7 @@ try {
     # ---------- Compilar y exportar ----------
     if (-not $SkipBuild) {
         # De a una: 6 builds de Gradle en paralelo pueden colgar el Docker local
-        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway") {
+        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway", "rabbit-topology") {
             Invoke-Step "Compilando $Service (varios minutos la primera vez)" {
                 docker compose -f $ComposeFile build $Service
             }
@@ -84,6 +85,11 @@ try {
     # ---------- Subir ----------
     Invoke-Step "Subiendo imágenes, compose, .env y ec2-up.sh" {
         scp @SshOpts $ImagesTar $ComposeFile ".env" "scripts/ec2/ec2-up.sh" "${Target}:~/$RemoteDir/"
+    }
+    Invoke-Step "Subiendo infra/rabbitmq/rabbitmq.conf" {
+        ssh @SshOpts $Target "mkdir -p ~/$RemoteDir/infra/rabbitmq"
+        if ($LASTEXITCODE -ne 0) { throw "No se pudo crear ~/milsabores/infra/rabbitmq en la EC2." }
+        scp @SshOpts "infra/rabbitmq/rabbitmq.conf" "${Target}:~/$RemoteDir/infra/rabbitmq/rabbitmq.conf"
     }
     # Por si el .sh salió de Windows con fin de línea CRLF
     Invoke-Step "Ajustando fin de línea de ec2-up.sh" {

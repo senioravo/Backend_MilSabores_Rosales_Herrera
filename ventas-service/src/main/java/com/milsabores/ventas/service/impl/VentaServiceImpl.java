@@ -1,7 +1,10 @@
 package com.milsabores.ventas.service.impl;
 
+import com.milsabores.rabbit.StockDescontarCommand;
 import com.milsabores.ventas.dto.*;
+import com.milsabores.ventas.exception.ReglaVentaInvalidaException;
 import com.milsabores.ventas.exception.VentaNotFoundException;
+import com.milsabores.ventas.messaging.StockCommandPublisher;
 import com.milsabores.ventas.model.DetalleVenta;
 import com.milsabores.ventas.model.EstadoVenta;
 import com.milsabores.ventas.model.Venta;
@@ -13,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +30,7 @@ public class VentaServiceImpl implements VentaService {
     
     private final VentaRepository ventaRepository;
     private final TransbankService transbankService;
+    private final StockCommandPublisher stockCommandPublisher;
     
     @Value("${transbank.return.url}")
     private String transbankReturnUrl;
@@ -32,7 +38,8 @@ public class VentaServiceImpl implements VentaService {
     @Override
     @Transactional
     public VentaResponseDTO crearVenta(VentaRequestDTO ventaRequest) {
-        // Crear la entidad Venta
+        validarReglaDeNegocio(ventaRequest);
+
         Venta venta = new Venta();
         venta.setUsuarioId(ventaRequest.getUsuarioId());
         venta.setUsuarioNombre(ventaRequest.getUsuarioNombre());
@@ -42,8 +49,7 @@ public class VentaServiceImpl implements VentaService {
         venta.setTotal(ventaRequest.getTotal());
         venta.setEstado(EstadoVenta.PENDIENTE);
         venta.setFechaCreacion(LocalDateTime.now());
-        
-        // Agregar detalles
+
         for (DetalleVentaDTO detalleDTO : ventaRequest.getDetalles()) {
             DetalleVenta detalle = new DetalleVenta();
             detalle.setProductoCode(detalleDTO.getProductoCode());
@@ -54,11 +60,41 @@ public class VentaServiceImpl implements VentaService {
             detalle.calcularSubtotal();
             venta.addDetalle(detalle);
         }
-        
-        // Guardar
+
         Venta ventaGuardada = ventaRepository.save(venta);
-        
+        publicarDescuentoDespuesDelCommit(ventaGuardada);
+
         return convertirADTO(ventaGuardada);
+    }
+
+    private void validarReglaDeNegocio(VentaRequestDTO ventaRequest) {
+        if (ventaRequest.getDetalles() == null || ventaRequest.getDetalles().isEmpty()) {
+            throw new ReglaVentaInvalidaException("La venta no tiene productos");
+        }
+        for (DetalleVentaDTO detalle : ventaRequest.getDetalles()) {
+            if (detalle.getProductoCode() == null || detalle.getProductoCode().isBlank()) {
+                throw new ReglaVentaInvalidaException("Cada producto de la venta necesita un código");
+            }
+            if (detalle.getCantidad() == null || detalle.getCantidad() < 1) {
+                throw new ReglaVentaInvalidaException("La cantidad de " + detalle.getProductoCode() + " debe ser al menos 1");
+            }
+        }
+    }
+
+    private void publicarDescuentoDespuesDelCommit(Venta venta) {
+        StockDescontarCommand command = new StockDescontarCommand(
+                venta.getId(),
+                venta.getDetalles().stream()
+                        .map(detalle -> new StockDescontarCommand.Item(
+                                detalle.getProductoCode(),
+                                detalle.getCantidad()))
+                        .toList());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                stockCommandPublisher.publicar(command);
+            }
+        });
     }
     
     @Override
