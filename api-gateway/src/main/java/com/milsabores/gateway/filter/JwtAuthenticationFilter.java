@@ -19,6 +19,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -33,6 +35,8 @@ import java.util.Date;
  */
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     @Value("${jwt.secret}")
     private String secret;
@@ -76,7 +80,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                             .build()))
                     .onErrorResume(
                             org.springframework.security.oauth2.jwt.JwtException.class,
-                            e -> authenticateLegacy(exchange, chain, token, request));
+                            e -> {
+                                log.warn("Token Entra rechazado: {}", e.getMessage());
+                                return authenticateLegacy(exchange, chain, token, request);
+                            });
         }
 
         return authenticateLegacy(exchange, chain, token, request);

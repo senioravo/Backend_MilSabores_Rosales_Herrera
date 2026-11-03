@@ -35,6 +35,13 @@ class EntraAudienceValidatorTest {
     }
 
     @Test
+    void acceptsApplicationIdUriWhenConfigUsesTheScope() {
+        var validator = new EntraAudienceValidator("api://my-api/access_as_user", "client-guid");
+        Jwt jwt = jwtWithAud("api://my-api");
+        assertFalse(validator.validate(jwt).hasErrors());
+    }
+
+    @Test
     void rejectsUnknownAudience() {
         var validator = new EntraAudienceValidator("api://my-api", "client-guid");
         Jwt jwt = jwtWithAud("other");

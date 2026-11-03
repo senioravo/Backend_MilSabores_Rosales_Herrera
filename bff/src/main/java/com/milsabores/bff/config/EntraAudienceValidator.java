@@ -21,9 +21,15 @@ final class EntraAudienceValidator implements OAuth2TokenValidator<Jwt> {
         if (audience != null && !audience.isBlank()) {
             String aud = audience.trim();
             addIfPresent(accepted, aud + "/access_as_user");
+            if (aud.endsWith("/access_as_user")) {
+                addIfPresent(accepted, aud.substring(0, aud.length() - "/access_as_user".length()));
+            }
             if (aud.startsWith("api://")) {
                 addIfPresent(accepted, aud.substring("api://".length()));
             }
+        }
+        if (clientId != null && !clientId.isBlank()) {
+            addIfPresent(accepted, "api://" + clientId.trim());
         }
         this.acceptedAudiences = accepted.stream()
                 .filter(s -> s != null && !s.isBlank())
