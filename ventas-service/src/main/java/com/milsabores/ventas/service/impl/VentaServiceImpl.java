@@ -62,7 +62,6 @@ public class VentaServiceImpl implements VentaService {
         }
 
         Venta ventaGuardada = ventaRepository.save(venta);
-        publicarDescuentoDespuesDelCommit(ventaGuardada);
 
         return convertirADTO(ventaGuardada);
     }
@@ -81,6 +80,16 @@ public class VentaServiceImpl implements VentaService {
         }
     }
 
+    /**
+     * El stock se descuenta solo cuando la venta pasa a COMPLETADA, es decir,
+     * con el pago aprobado. Si ya estaba completada no se envía otra vez.
+     */
+    private void descontarStockSiSeCompleto(EstadoVenta estadoAnterior, Venta venta) {
+        if (estadoAnterior != EstadoVenta.COMPLETADA && venta.getEstado() == EstadoVenta.COMPLETADA) {
+            publicarDescuentoDespuesDelCommit(venta);
+        }
+    }
+
     private void publicarDescuentoDespuesDelCommit(Venta venta) {
         StockDescontarCommand command = new StockDescontarCommand(
                 venta.getId(),
@@ -92,7 +101,14 @@ public class VentaServiceImpl implements VentaService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                stockCommandPublisher.publicar(command);
+                // La venta ya quedó guardada: si RabbitMQ falla, se registra
+                // y la respuesta HTTP no se convierte en un error 500.
+                try {
+                    stockCommandPublisher.publicar(command);
+                } catch (Exception e) {
+                    log.error("La venta {} quedó guardada, pero no se pudo enviar el descuento de stock",
+                            command.ventaId(), e);
+                }
             }
         });
     }
@@ -134,11 +150,13 @@ public class VentaServiceImpl implements VentaService {
     public VentaResponseDTO actualizarEstadoVenta(Long id, EstadoVenta nuevoEstado) {
         Venta venta = ventaRepository.findById(id)
                 .orElseThrow(() -> new VentaNotFoundException("Venta no encontrada con ID: " + id));
-        
+
+        EstadoVenta estadoAnterior = venta.getEstado();
         venta.setEstado(nuevoEstado);
         venta.setFechaActualizacion(LocalDateTime.now());
-        
+
         Venta ventaActualizada = ventaRepository.save(venta);
+        descontarStockSiSeCompleto(estadoAnterior, ventaActualizada);
         return convertirADTO(ventaActualizada);
     }
     
@@ -195,7 +213,8 @@ public class VentaServiceImpl implements VentaService {
     public VentaResponseDTO confirmarPago(Long ventaId, String token, boolean exitoso) {
         Venta venta = ventaRepository.findById(ventaId)
                 .orElseThrow(() -> new VentaNotFoundException("Venta no encontrada con ID: " + ventaId));
-        
+        EstadoVenta estadoAnterior = venta.getEstado();
+
         try {
             log.info("Confirmando pago con Transbank para venta {}, token: {}", ventaId, token);
             
@@ -221,7 +240,8 @@ public class VentaServiceImpl implements VentaService {
         
         venta.setFechaActualizacion(LocalDateTime.now());
         Venta ventaActualizada = ventaRepository.save(venta);
-        
+        descontarStockSiSeCompleto(estadoAnterior, ventaActualizada);
+
         return convertirADTO(ventaActualizada);
     }
     

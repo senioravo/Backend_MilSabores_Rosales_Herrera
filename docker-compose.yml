@@ -32,6 +32,8 @@ services:
     build: ./producto-service
     image: milsabores/producto-service:latest
     ports: ["8082:8082"]
+    depends_on:
+      rabbit-topology: { condition: service_completed_successfully }
 
   carrito-service:
     <<: *spring-service
@@ -44,6 +46,8 @@ services:
     build: ./ventas-service
     image: milsabores/ventas-service:latest
     ports: ["8084:8084"]
+    depends_on:
+      rabbit-topology: { condition: service_completed_successfully }
 
   bff:
     <<: *spring-service
@@ -82,8 +86,23 @@ services:
     build: ./rabbit-admin
     image: milsabores/rabbit-admin:latest
     ports: ["8086:8086"]
+    depends_on:
+      rabbit2: { condition: service_healthy }
 
-  # Nodo 1 del clúster. Los servicios Java todavía no publican aquí.
+  # Declara exchanges, colas y DLQ, y termina. Con un volumen nuevo
+  # el clúster parte sin colas y los listeners de producto no arrancan.
+  rabbit-topology:
+    build: ./rabbit-topology
+    image: milsabores/rabbit-topology:latest
+    restart: "no"
+    env_file: .env
+    environment:
+      RABBITMQ_ADDRESSES: rabbit1:5672,rabbit2:5672
+    networks: [milsabores]
+    depends_on:
+      rabbit2: { condition: service_healthy }
+
+  # Nodo 1 del clúster.
   rabbit1:
     image: rabbitmq:4.2-management
     hostname: rabbit1

@@ -29,7 +29,8 @@ $Images = @(
     "milsabores/ventas-service:latest",
     "milsabores/bff:latest",
     "milsabores/api-gateway:latest",
-    "milsabores/rabbit-topology:latest"
+    "milsabores/rabbit-topology:latest",
+    "milsabores/rabbit-admin:latest"
 )
 $Target = "$User@$Ip"
 $SshOpts = @("-i", $Key, "-o", "StrictHostKeyChecking=accept-new")
@@ -69,7 +70,7 @@ try {
     # ---------- Compilar y exportar ----------
     if (-not $SkipBuild) {
         # De a una: 6 builds de Gradle en paralelo pueden colgar el Docker local
-        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway", "rabbit-topology") {
+        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway", "rabbit-topology", "rabbit-admin") {
             Invoke-Step "Compilando $Service (varios minutos la primera vez)" {
                 docker compose -f $ComposeFile build $Service
             }

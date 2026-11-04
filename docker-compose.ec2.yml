@@ -2,12 +2,13 @@
 #  Mil Sabores - despliegue en una EC2 t3.medium (AWS Academy)
 #
 #  t3.medium = 4 GB de RAM y 2 vCPU con créditos, así que:
-#  - 6 JVMs: 4 servicios de datos + bff + gateway (EP1: el gateway
-#    solo enruta al bff).
+#  - 7 JVMs: 4 servicios de datos + rabbit-admin + bff + gateway
+#    (EP1: el gateway solo enruta al bff).
 #  - Cada JVM tiene heap y metaspace acotados (JAVA_OPTS): ~450 MB
-#    por servicio, ~2,7 GB en total.
+#    por servicio, ~3,1 GB en total.
 #  - usuario y carrito arrancan ya. producto y ventas esperan a que
-#    rabbit-topology declare las colas. El bff espera a los cuatro.
+#    rabbit-topology declare las colas. El bff espera a los cuatro
+#    y a rabbit-admin.
 #  - Solo el gateway publica su puerto; el resto de Java queda en la red interna.
 #  - RabbitMQ (EP2, P3): rabbit1 y rabbit2, el mismo clúster que en local.
 #    La web se publica en 15672 y 15673. El AMQP no sale de la red Docker.
@@ -83,11 +84,27 @@ services:
       PRODUCTO_SERVICE_URL: http://producto-service:8082
       CARRITO_SERVICE_URL: http://carrito-service:8083
       VENTAS_SERVICE_URL: http://ventas-service:8084
+      RABBIT_ADMIN_SERVICE_URL: http://rabbit-admin:8086
     depends_on:
       usuario-service: { condition: service_healthy }
       producto-service: { condition: service_healthy }
       carrito-service: { condition: service_healthy }
       ventas-service: { condition: service_healthy }
+      rabbit-admin: { condition: service_healthy }
+
+  # EP2: API para administrar colas, exchanges y bindings. Sin puerto
+  # publicado: solo se entra por gateway -> bff, que exige el rol ADMIN.
+  rabbit-admin:
+    <<: *spring-service
+    build: ./rabbit-admin
+    image: milsabores/rabbit-admin:latest
+    environment:
+      <<: *jvm
+      RABBITMQ_ADDRESSES: rabbit1:5672,rabbit2:5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
+    depends_on:
+      rabbit2: { condition: service_healthy }
 
   api-gateway:
     <<: *spring-service
