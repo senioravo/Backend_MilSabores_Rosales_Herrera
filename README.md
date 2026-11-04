@@ -73,7 +73,7 @@ Cada microservicio sigue las capas Controller → Service → Repository → Ent
 
 ## Mensajería con RabbitMQ (EP2)
 
-El checkout no descuenta el stock dentro del mismo request. Ventas guarda la venta y, recién cuando esa transacción hizo commit, publica un comando. Producto lo consume, descuenta y confirma. Notificación y auditoría se enteran por un evento, no por una llamada HTTP.
+El checkout no descuenta el stock dentro del mismo request. Cuando la venta pasa a `COMPLETADA` (pago aprobado por Transbank) y esa transacción hizo commit, ventas publica un comando. Una venta rechazada no toca el stock. Producto lo consume, descuenta y confirma. Notificación y auditoría se enteran por un evento, no por una llamada HTTP.
 
 El clúster son dos nodos del mismo broker, no dos colas: `rabbit@rabbit1` y `rabbit@rabbit2`. Localmente viven en `docker-compose.yml`. En la EC2 están en `docker-compose.ec2.yml` (el acceso quedó en `docs/DEPLOY.md`). Los dos leen `infra/rabbitmq/rabbitmq.conf` y la misma `RABBITMQ_ERLANG_COOKIE`. La cookie une los nodos. La web se abre con `admin` / `admin123`.
 
@@ -103,7 +103,7 @@ El comando y el evento llevan `ventaId` y la lista de ítems (`productoCode`, `c
 ### Quién publica y quién consume
 
 1. El BFF crea la venta y sigue con Transbank. No espera a que baje el stock.
-2. `VentaServiceImpl` registra el envío en `afterCommit`. `StockCommandPublisher` manda `StockDescontarCommand` a `milsabores.direct` con la clave `pedido.stock.descontar`.
+2. Cuando `confirmarPago` (o un cambio de estado manual) deja la venta en `COMPLETADA` por primera vez, `VentaServiceImpl` registra el envío en `afterCommit`. Si RabbitMQ falla en ese momento, se registra en el log y la respuesta HTTP no falla. `StockCommandPublisher` manda `StockDescontarCommand` a `milsabores.direct` con la clave `pedido.stock.descontar`.
 3. `StockCommandConsumer` (cola `pedido.stock`) llama a `ProductoService.reducirStockDeVenta`. El ACK es manual y va solo si el descuento quedó hecho. Un error de base de datos se reintenta hasta 3 veces. Un producto inexistente, un dato inválido o los reintentos agotados hacen NACK sin requeue, y el mensaje pasa a `pedido.stock.dlq`.
 4. Después del ACK, `StockEventPublisher` publica `StockDescontadoEvent` en `milsabores.topic` con la clave `pedido.stock.descontado`. Si esa publicación falla, no se niega el comando que ya se confirmó.
 5. `NotificacionPedidoListener` y `AuditoriaPedidoListener` confirman con ACK. No son otros microservicios: corren en el mismo proceso de producto.
@@ -138,7 +138,7 @@ Nuevos:
 
 Cambiados para enganchar eso:
 
-- `ventas-service/.../VentaServiceImpl.java` publica después del commit
+- `ventas-service/.../VentaServiceImpl.java` publica después del commit, cuando la venta queda `COMPLETADA`
 - `producto-service/.../ProductoService.java` descuenta todas las líneas de la venta en una transacción
 - `producto-service/.../ProductoServiceApplication.java` también escanea notificación y auditoría
 - `api-gateway/.../application.yml` ruta `admin-api`
