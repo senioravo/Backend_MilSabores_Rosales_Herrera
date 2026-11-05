@@ -1,6 +1,7 @@
 package com.milsabores.notificacion;
 
 import com.milsabores.messaging.MensajeNoProcesado;
+import com.milsabores.producto.config.ProductoRabbitConfig;
 import com.milsabores.rabbit.RabbitTopologyNames;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +17,10 @@ import java.io.IOException;
 @Component
 public class NotificacionDlqListener {
 
-    @RabbitListener(queues = RabbitTopologyNames.NOTIFICATION_DLQ, ackMode = "MANUAL")
+    @RabbitListener(
+            queues = RabbitTopologyNames.NOTIFICATION_DLQ,
+            ackMode = "MANUAL",
+            messageConverter = ProductoRabbitConfig.DLQ_MESSAGE_CONVERTER)
     public void recibir(
             Message message,
             Channel channel,
