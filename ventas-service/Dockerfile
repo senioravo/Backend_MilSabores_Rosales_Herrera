@@ -1,6 +1,7 @@
 # ============================================================
 #  ventas-service - imagen Docker (build multi-stage)
-#  Build:  docker build -t milsabores/ventas-service ./ventas-service
+#  Build:  docker compose build ventas-service
+#          (usa rabbit-topology como contexto adicional; ver docker-compose.yml)
 #  Run:    docker run -p 8084:8084 --env-file .env milsabores/ventas-service
 # ============================================================
 
@@ -10,6 +11,8 @@ WORKDIR /app
 
 # Primero solo los scripts de build, para cachear las dependencias
 # en una capa propia (se reutiliza mientras build.gradle no cambie)
+# settings.gradle incluye ../rabbit-topology (nombres y mensajes compartidos)
+COPY --from=rabbit-topology . /rabbit-topology
 COPY build.gradle settings.gradle ./
 RUN gradle dependencies --no-daemon > /dev/null 2>&1 || true
 

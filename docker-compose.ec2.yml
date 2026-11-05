@@ -46,7 +46,10 @@ services:
 
   producto-service:
     <<: *spring-service
-    build: ./producto-service
+    build:
+      context: ./producto-service
+      additional_contexts:
+        rabbit-topology: ./rabbit-topology
     image: milsabores/producto-service:latest
     environment:
       <<: *jvm
@@ -63,7 +66,10 @@ services:
 
   ventas-service:
     <<: *spring-service
-    build: ./ventas-service
+    build:
+      context: ./ventas-service
+      additional_contexts:
+        rabbit-topology: ./rabbit-topology
     image: milsabores/ventas-service:latest
     environment:
       <<: *jvm
