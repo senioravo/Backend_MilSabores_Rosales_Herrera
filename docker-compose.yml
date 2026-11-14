@@ -13,6 +13,15 @@
 #  RabbitMQ local (EP2), dos nodos del mismo clúster:
 #    rabbit1  AMQP 5672   web http://localhost:15672
 #    rabbit2  AMQP 5673   web http://localhost:15673
+#
+#  Kafka local (EP3). Tres Zookeeper y tres brokers, un proceso por
+#  contenedor. kafka-topology crea los dos topics y se apaga.
+#  Desde Windows el broker se ve en:
+#    kafka1  localhost:19092
+#    kafka2  localhost:19093
+#    kafka3  localhost:19094
+#  Entre contenedores se hablan por kafka1:9092, kafka2:9092 y kafka3:9092.
+#  La pantalla para ver el clúster: http://localhost:8090
 # ============================================================
 
 x-spring-service: &spring-service
@@ -33,10 +42,14 @@ services:
       context: ./producto-service
       additional_contexts:
         rabbit-topology: ./rabbit-topology
+        kafka-topology: ./kafka-topology
     image: milsabores/producto-service:latest
     ports: ["8082:8082"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka1:9092,kafka2:9092,kafka3:9092
     depends_on:
       rabbit-topology: { condition: service_completed_successfully }
+      kafka-topology: { condition: service_completed_successfully }
 
   carrito-service:
     <<: *spring-service
@@ -50,10 +63,14 @@ services:
       context: ./ventas-service
       additional_contexts:
         rabbit-topology: ./rabbit-topology
+        kafka-topology: ./kafka-topology
     image: milsabores/ventas-service:latest
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka1:9092,kafka2:9092,kafka3:9092
     ports: ["8084:8084"]
     depends_on:
       rabbit-topology: { condition: service_completed_successfully }
+      kafka-topology: { condition: service_completed_successfully }
 
   bff:
     <<: *spring-service
@@ -159,6 +176,154 @@ services:
       retries: 8
       start_period: 20s
 
+  # EP3. Zookeeper guarda la lista de brokers y elige un líder nuevo
+  # si uno se cae. Son tres para que el voto siga aunque caiga uno.
+  zookeeper1: &zookeeper
+    image: confluentinc/cp-zookeeper:7.6.1
+    hostname: zookeeper1
+    container_name: zookeeper1
+    restart: unless-stopped
+    ports: ["2181:2181"]
+    environment: &zk-env
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
+      ZOOKEEPER_SERVERS: zookeeper1:2888:3888;zookeeper2:2888:3888;zookeeper3:2888:3888
+      KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"
+    volumes:
+      - zookeeper1_data:/var/lib/zookeeper/data
+      - zookeeper1_log:/var/lib/zookeeper/log
+    networks: [milsabores]
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc -w 2 localhost 2181 | grep Mode"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  zookeeper2:
+    <<: *zookeeper
+    hostname: zookeeper2
+    container_name: zookeeper2
+    ports: ["2182:2181"]
+    environment:
+      <<: *zk-env
+      ZOOKEEPER_SERVER_ID: 2
+    volumes:
+      - zookeeper2_data:/var/lib/zookeeper/data
+      - zookeeper2_log:/var/lib/zookeeper/log
+
+  zookeeper3:
+    <<: *zookeeper
+    hostname: zookeeper3
+    container_name: zookeeper3
+    ports: ["2183:2181"]
+    environment:
+      <<: *zk-env
+      ZOOKEEPER_SERVER_ID: 3
+    volumes:
+      - zookeeper3_data:/var/lib/zookeeper/data
+      - zookeeper3_log:/var/lib/zookeeper/log
+
+  # Tres brokers. Cada uno es un nodo de Kafka. El factor 3 obliga a
+  # que los topics internos también tengan una copia en cada broker.
+  kafka1: &kafka
+    image: confluentinc/cp-kafka:7.6.1
+    hostname: kafka1
+    container_name: kafka1
+    restart: unless-stopped
+    ports: ["19092:9094"]
+    environment: &kafka-env
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper1:2181,zookeeper2:2181,zookeeper3:2181
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: "-Xmx384m -Xms256m"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - kafka1_data:/var/lib/kafka/data
+    networks: [milsabores]
+    depends_on:
+      zookeeper1: { condition: service_healthy }
+      zookeeper2: { condition: service_healthy }
+      zookeeper3: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "cub kafka-ready -b localhost:9092 1 10"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+
+  kafka2:
+    <<: *kafka
+    hostname: kafka2
+    container_name: kafka2
+    ports: ["19093:9094"]
+    environment:
+      <<: *kafka-env
+      KAFKA_BROKER_ID: 2
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:9092,EXTERNAL://localhost:19093
+    volumes:
+      - kafka2_data:/var/lib/kafka/data
+
+  kafka3:
+    <<: *kafka
+    hostname: kafka3
+    container_name: kafka3
+    ports: ["19094:9094"]
+    environment:
+      <<: *kafka-env
+      KAFKA_BROKER_ID: 3
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka3:9092,EXTERNAL://localhost:19094
+    volumes:
+      - kafka3_data:/var/lib/kafka/data
+
+  # Pantalla de solo lectura. No publica ni crea topics: muestra brokers,
+  # particiones, réplicas y mensajes. El puerto 8080 de adentro se publica
+  # en 8090 porque 8080 ya lo usa el api-gateway.
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports: ["8090:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: milsabores
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:9092,kafka2:9092,kafka3:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper1:2181
+      DYNAMIC_CONFIG_ENABLED: "false"
+    networks: [milsabores]
+    depends_on:
+      kafka1: { condition: service_healthy }
+      kafka2: { condition: service_healthy }
+      kafka3: { condition: service_healthy }
+
+  # Crea milsabores.stock y milsabores.ventas, y termina.
+  # No se queda corriendo. Si el volumen de Kafka ya tiene los topics,
+  # los vuelve a dejar con la misma retención.
+  kafka-topology:
+    build: ./kafka-topology
+    image: milsabores/kafka-topology:latest
+    restart: "no"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka1:9092,kafka2:9092,kafka3:9092
+      JAVA_OPTS: "-Xms64m -Xmx128m -XX:+ExitOnOutOfMemoryError"
+    networks: [milsabores]
+    depends_on:
+      kafka1: { condition: service_healthy }
+      kafka2: { condition: service_healthy }
+      kafka3: { condition: service_healthy }
+
 networks:
   milsabores:
     driver: bridge
@@ -166,3 +331,12 @@ networks:
 volumes:
   rabbit1_data:
   rabbit2_data:
+  zookeeper1_data:
+  zookeeper1_log:
+  zookeeper2_data:
+  zookeeper2_log:
+  zookeeper3_data:
+  zookeeper3_log:
+  kafka1_data:
+  kafka2_data:
+  kafka3_data:

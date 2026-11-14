@@ -5,3 +5,4 @@ plugins {
 rootProject.name = 'producto-service'
 
 includeBuild('../rabbit-topology')
+includeBuild('../kafka-topology')

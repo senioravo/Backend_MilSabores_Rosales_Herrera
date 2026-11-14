@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: kafka-topology
+  main:
+    web-application-type: none
+  kafka:
+    # En el PC, sin variables, entra por los puertos publicados.
+    # En Compose el servicio pone kafka1, kafka2 y kafka3.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092,localhost:19093,localhost:19094}
+    admin:
+      fail-fast: true
+      modify-topic-configs: true

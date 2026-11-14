@@ -11,8 +11,9 @@ WORKDIR /app
 
 # Primero solo los scripts de build, para cachear las dependencias
 # en una capa propia (se reutiliza mientras build.gradle no cambie)
-# settings.gradle incluye ../rabbit-topology (nombres y mensajes compartidos)
+# settings.gradle incluye rabbit-topology y kafka-topology (nombres compartidos)
 COPY --from=rabbit-topology . /rabbit-topology
+COPY --from=kafka-topology . /kafka-topology
 COPY build.gradle settings.gradle ./
 RUN gradle dependencies --no-daemon > /dev/null 2>&1 || true
 
