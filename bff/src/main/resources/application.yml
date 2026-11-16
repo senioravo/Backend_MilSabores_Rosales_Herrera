@@ -19,6 +19,8 @@ services:
     url: ${VENTAS_SERVICE_URL:http://localhost:8084}
   admin:
     url: ${RABBIT_ADMIN_SERVICE_URL:http://localhost:8086}
+  kafka-admin:
+    url: ${KAFKA_ADMIN_SERVICE_URL:http://localhost:8087}
 
 springdoc:
   api-docs:

@@ -116,6 +116,22 @@ class BffSecurityIntegrationTest {
     }
 
     @Test
+    void kafkaAdminSinTokenResponde401() throws Exception {
+        mockMvc.perform(get("/api/kafka-admin/topics"))
+                .andExpect(status().isUnauthorized());
+        verify(downstreamApiProxy, never()).forward(any(), any());
+    }
+
+    @Test
+    void kafkaAdminConRolClienteResponde403() throws Exception {
+        mockMvc.perform(get("/api/kafka-admin/topics")
+                        .header("Authorization", "Bearer " + tokenConRol("CLIENTE")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Se requiere el rol ADMIN"));
+        verify(downstreamApiProxy, never()).forward(any(), any());
+    }
+
+    @Test
     void adminConRolAdminLlegaAlProxy() throws Exception {
         when(downstreamApiProxy.forward(any(), any())).thenReturn(ResponseEntity.status(201).build());
 

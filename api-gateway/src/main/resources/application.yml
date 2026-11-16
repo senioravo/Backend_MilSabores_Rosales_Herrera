@@ -9,6 +9,11 @@ spring:
           uri: ${BFF_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/admin/**
+        # EP3: administrar Kafka entra por el mismo BFF y el mismo rol ADMIN.
+        - id: kafka-admin-api
+          uri: ${BFF_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/kafka-admin/**
         # EP1: el gateway solo enruta al BFF; el BFF orquesta hacia los microservicios.
         - id: bff-orchestrator
           uri: ${BFF_SERVICE_URL:http://localhost:8085}

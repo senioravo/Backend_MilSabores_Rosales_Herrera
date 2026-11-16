@@ -16,3 +16,5 @@ services:
     url: http://localhost:8084
   admin:
     url: http://localhost:8086
+  kafka-admin:
+    url: http://localhost:8087

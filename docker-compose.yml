@@ -22,6 +22,8 @@
 #    kafka3  localhost:19094
 #  Entre contenedores se hablan por kafka1:9092, kafka2:9092 y kafka3:9092.
 #  La pantalla para ver el clúster: http://localhost:8090
+#  kafka-admin crea, cambia y borra topics. Puerto 8087.
+#  Desde afuera entra por el gateway, en /api/kafka-admin, con rol ADMIN.
 # ============================================================
 
 x-spring-service: &spring-service
@@ -83,12 +85,14 @@ services:
       CARRITO_SERVICE_URL: http://carrito-service:8083
       VENTAS_SERVICE_URL: http://ventas-service:8084
       RABBIT_ADMIN_SERVICE_URL: http://rabbit-admin:8086
+      KAFKA_ADMIN_SERVICE_URL: http://kafka-admin:8087
     depends_on:
       usuario-service: { condition: service_healthy }
       producto-service: { condition: service_healthy }
       carrito-service: { condition: service_healthy }
       ventas-service: { condition: service_healthy }
       rabbit-admin: { condition: service_healthy }
+      kafka-admin: { condition: service_healthy }
 
   api-gateway:
     <<: *spring-service
@@ -111,6 +115,18 @@ services:
     ports: ["8086:8086"]
     depends_on:
       rabbit2: { condition: service_healthy }
+
+  kafka-admin:
+    <<: *spring-service
+    build: ./kafka-admin
+    image: milsabores/kafka-admin:latest
+    ports: ["8087:8087"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka1:9092,kafka2:9092,kafka3:9092
+    depends_on:
+      kafka1: { condition: service_healthy }
+      kafka2: { condition: service_healthy }
+      kafka3: { condition: service_healthy }
 
   # Declara exchanges, colas y DLQ, y termina. Con un volumen nuevo
   # el clúster parte sin colas y los listeners de producto no arrancan.

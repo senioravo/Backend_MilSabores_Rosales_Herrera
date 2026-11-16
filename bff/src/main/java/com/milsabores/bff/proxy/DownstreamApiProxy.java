@@ -30,6 +30,7 @@ public class DownstreamApiProxy {
     private final String carritoBase;
     private final String ventasBase;
     private final String adminBase;
+    private final String kafkaAdminBase;
     private final RestClient restClient;
 
     public DownstreamApiProxy(
@@ -37,12 +38,14 @@ public class DownstreamApiProxy {
             @Value("${services.producto.url}") String productoBase,
             @Value("${services.carrito.url}") String carritoBase,
             @Value("${services.ventas.url}") String ventasBase,
-            @Value("${services.admin.url}") String adminBase) {
+            @Value("${services.admin.url}") String adminBase,
+            @Value("${services.kafka-admin.url}") String kafkaAdminBase) {
         this.usuarioBase = trimTrailingSlash(usuarioBase);
         this.productoBase = trimTrailingSlash(productoBase);
         this.carritoBase = trimTrailingSlash(carritoBase);
         this.ventasBase = trimTrailingSlash(ventasBase);
         this.adminBase = trimTrailingSlash(adminBase);
+        this.kafkaAdminBase = trimTrailingSlash(kafkaAdminBase);
         this.restClient = RestClient.create();
     }
 
@@ -73,6 +76,9 @@ public class DownstreamApiProxy {
     }
 
     private String resolveBaseUrl(String path) {
+        if (path.startsWith("/api/kafka-admin")) {
+            return kafkaAdminBase;
+        }
         if (path.startsWith("/api/admin")) {
             return adminBase;
         }

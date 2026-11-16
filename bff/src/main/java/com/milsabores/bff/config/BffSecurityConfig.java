@@ -33,7 +33,7 @@ public class BffSecurityConfig {
                         .permitAll()
                         .requestMatchers(BffPublicRoutePolicy.publicPathMatcher())
                         .permitAll()
-                        .requestMatchers("/api/admin/**")
+                        .requestMatchers("/api/admin/**", "/api/kafka-admin/**")
                         .hasRole("ADMIN")
                         .requestMatchers("/api/**", "/bff/**")
                         .authenticated()
@@ -41,7 +41,8 @@ public class BffSecurityConfig {
                         .denyAll())
                 .exceptionHandling(ex -> ex.accessDeniedHandler((request, response, denied) -> {
                     String path = request.getRequestURI();
-                    String message = path != null && path.startsWith("/api/admin")
+                    String message = path != null
+                            && (path.startsWith("/api/admin") || path.startsWith("/api/kafka-admin"))
                             ? "Se requiere el rol ADMIN"
                             : "No tienes permiso para esta ruta";
                     response.setStatus(HttpServletResponse.SC_FORBIDDEN);

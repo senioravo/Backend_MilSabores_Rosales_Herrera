@@ -1,5 +1,6 @@
 package com.milsabores.producto.messaging;
 
+import com.milsabores.kafka.StockDescontado;
 import com.milsabores.producto.exception.ProductoNotFoundException;
 import com.milsabores.producto.service.ProductoService;
 import com.milsabores.rabbit.RabbitTopologyNames;
@@ -25,6 +26,7 @@ public class StockCommandConsumer {
     private final ProductoService productoService;
     private final RetryTemplate stockRetryTemplate;
     private final StockEventPublisher stockEventPublisher;
+    private final StockKafkaPublisher stockKafkaPublisher;
 
     @RabbitListener(queues = RabbitTopologyNames.STOCK_QUEUE, ackMode = "MANUAL")
     public void consumir(
@@ -57,6 +59,19 @@ public class StockCommandConsumer {
             log.error("El stock de la venta {} ya quedó descontado, pero el evento no se publicó.",
                     command.ventaId(), e);
         }
+        try {
+            stockKafkaPublisher.publicar(avisoDe(command));
+        } catch (Exception e) {
+            log.error("El stock de la venta {} ya quedó descontado, pero el aviso de Kafka no se publicó.",
+                    command.ventaId(), e);
+        }
+    }
+
+    private static StockDescontado avisoDe(StockDescontarCommand command) {
+        List<StockDescontado.Item> items = command.items().stream()
+                .map(item -> new StockDescontado.Item(item.productoCode(), item.cantidad()))
+                .toList();
+        return new StockDescontado(command.ventaId(), items);
     }
 
     private static StockDescontadoEvent eventoDe(StockDescontarCommand command) {

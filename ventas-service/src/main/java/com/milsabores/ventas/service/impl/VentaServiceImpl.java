@@ -1,10 +1,12 @@
 package com.milsabores.ventas.service.impl;
 
+import com.milsabores.kafka.VentaRegistrada;
 import com.milsabores.rabbit.StockDescontarCommand;
 import com.milsabores.ventas.dto.*;
 import com.milsabores.ventas.exception.ReglaVentaInvalidaException;
 import com.milsabores.ventas.exception.VentaNotFoundException;
 import com.milsabores.ventas.messaging.StockCommandPublisher;
+import com.milsabores.ventas.messaging.VentaKafkaPublisher;
 import com.milsabores.ventas.model.DetalleVenta;
 import com.milsabores.ventas.model.EstadoVenta;
 import com.milsabores.ventas.model.Venta;
@@ -31,6 +33,7 @@ public class VentaServiceImpl implements VentaService {
     private final VentaRepository ventaRepository;
     private final TransbankService transbankService;
     private final StockCommandPublisher stockCommandPublisher;
+    private final VentaKafkaPublisher ventaKafkaPublisher;
     
     @Value("${transbank.return.url}")
     private String transbankReturnUrl;
@@ -62,6 +65,7 @@ public class VentaServiceImpl implements VentaService {
         }
 
         Venta ventaGuardada = ventaRepository.save(venta);
+        publicarVentaDespuesDelCommit(ventaGuardada);
 
         return convertirADTO(ventaGuardada);
     }
@@ -88,6 +92,39 @@ public class VentaServiceImpl implements VentaService {
         if (estadoAnterior != EstadoVenta.COMPLETADA && venta.getEstado() == EstadoVenta.COMPLETADA) {
             publicarDescuentoDespuesDelCommit(venta);
         }
+    }
+
+    private void publicarVentaDespuesDelCommit(Venta venta) {
+        VentaRegistrada aviso = avisoDe(venta);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    ventaKafkaPublisher.publicar(aviso);
+                } catch (Exception e) {
+                    log.error("La venta {} quedó guardada, pero el aviso de Kafka no se publicó",
+                            aviso.ventaId(), e);
+                }
+            }
+        });
+    }
+
+    private static VentaRegistrada avisoDe(Venta venta) {
+        List<VentaRegistrada.Item> items = venta.getDetalles().stream()
+                .map(detalle -> new VentaRegistrada.Item(
+                        detalle.getProductoCode(),
+                        detalle.getProductoNombre(),
+                        detalle.getCantidad()))
+                .toList();
+        return new VentaRegistrada(
+                venta.getId(),
+                venta.getUsuarioId(),
+                venta.getUsuarioNombre(),
+                venta.getUsuarioEmail(),
+                venta.getEstado().name(),
+                venta.getTotal(),
+                venta.getFechaCreacion(),
+                items);
     }
 
     private void publicarDescuentoDespuesDelCommit(Venta venta) {
@@ -157,6 +194,7 @@ public class VentaServiceImpl implements VentaService {
 
         Venta ventaActualizada = ventaRepository.save(venta);
         descontarStockSiSeCompleto(estadoAnterior, ventaActualizada);
+        publicarVentaDespuesDelCommit(ventaActualizada);
         return convertirADTO(ventaActualizada);
     }
     
@@ -180,7 +218,7 @@ public class VentaServiceImpl implements VentaService {
             venta.setTransbankToken(tbkResponse.getToken());
             venta.setEstado(EstadoVenta.PROCESANDO);
             venta.setFechaActualizacion(LocalDateTime.now());
-            ventaRepository.save(venta);
+            publicarVentaDespuesDelCommit(ventaRepository.save(venta));
             
             // Preparar respuesta para el frontend
             TransbankResponseDTO response = new TransbankResponseDTO();
@@ -199,7 +237,7 @@ public class VentaServiceImpl implements VentaService {
             log.error("Error al procesar pago con Transbank para venta {}", ventaId, e);
             
             venta.setEstado(EstadoVenta.RECHAZADA);
-            ventaRepository.save(venta);
+            publicarVentaDespuesDelCommit(ventaRepository.save(venta));
             
             TransbankResponseDTO response = new TransbankResponseDTO();
             response.setExitoso(false);
@@ -241,6 +279,7 @@ public class VentaServiceImpl implements VentaService {
         venta.setFechaActualizacion(LocalDateTime.now());
         Venta ventaActualizada = ventaRepository.save(venta);
         descontarStockSiSeCompleto(estadoAnterior, ventaActualizada);
+        publicarVentaDespuesDelCommit(ventaActualizada);
 
         return convertirADTO(ventaActualizada);
     }
