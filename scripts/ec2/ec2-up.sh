@@ -72,3 +72,4 @@ echo
 free -h
 echo
 echo "Listo. Backend disponible en http://<IP-elástica>:8080"
+echo "Kafka UI en http://<IP-elástica>:8090  (los tres nodos tienen que estar arriba)"

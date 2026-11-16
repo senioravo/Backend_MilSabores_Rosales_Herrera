@@ -30,7 +30,9 @@ $Images = @(
     "milsabores/bff:latest",
     "milsabores/api-gateway:latest",
     "milsabores/rabbit-topology:latest",
-    "milsabores/rabbit-admin:latest"
+    "milsabores/rabbit-admin:latest",
+    "milsabores/kafka-topology:latest",
+    "milsabores/kafka-admin:latest"
 )
 $Target = "$User@$Ip"
 $SshOpts = @("-i", $Key, "-o", "StrictHostKeyChecking=accept-new")
@@ -70,7 +72,7 @@ try {
     # ---------- Compilar y exportar ----------
     if (-not $SkipBuild) {
         # De a una: 6 builds de Gradle en paralelo pueden colgar el Docker local
-        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway", "rabbit-topology", "rabbit-admin") {
+        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway", "rabbit-topology", "rabbit-admin", "kafka-topology", "kafka-admin") {
             Invoke-Step "Compilando $Service (varios minutos la primera vez)" {
                 docker compose -f $ComposeFile build $Service
             }
@@ -85,7 +87,7 @@ try {
 
     # ---------- Subir ----------
     Invoke-Step "Subiendo imágenes, compose, .env y ec2-up.sh" {
-        scp @SshOpts $ImagesTar $ComposeFile ".env" "scripts/ec2/ec2-up.sh" "${Target}:~/$RemoteDir/"
+        scp @SshOpts $ImagesTar $ComposeFile "docker-compose.kafka-node.yml" ".env" "scripts/ec2/ec2-up.sh" "${Target}:~/$RemoteDir/"
     }
     Invoke-Step "Subiendo infra/rabbitmq/rabbitmq.conf" {
         ssh @SshOpts $Target "mkdir -p ~/$RemoteDir/infra/rabbitmq"

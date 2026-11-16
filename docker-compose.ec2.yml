@@ -2,17 +2,24 @@
 #  Mil Sabores - despliegue en una EC2 t3.medium (AWS Academy)
 #
 #  t3.medium = 4 GB de RAM y 2 vCPU con créditos, así que:
-#  - 7 JVMs: 4 servicios de datos + rabbit-admin + bff + gateway
+#  - 8 JVMs: 4 servicios de datos + rabbit-admin + kafka-admin + bff + gateway.
 #    (EP1: el gateway solo enruta al bff).
-#  - Cada JVM tiene heap y metaspace acotados (JAVA_OPTS): ~450 MB
-#    por servicio, ~3,1 GB en total.
+#  - Cada JVM tiene heap y metaspace acotados (JAVA_OPTS).
 #  - usuario y carrito arrancan ya. producto y ventas esperan a que
-#    rabbit-topology declare las colas. El bff espera a los cuatro
-#    y a rabbit-admin.
-#  - Solo el gateway publica su puerto; el resto de Java queda en la red interna.
-#  - RabbitMQ (EP2, P3): rabbit1 y rabbit2, el mismo clúster que en local.
-#    La web se publica en 15672 y 15673. El AMQP no sale de la red Docker.
-#  - rabbit-topology declara las seis colas y se apaga. No se queda corriendo.
+#    rabbit-topology declare las colas y kafka-topology cree los topics.
+#    El bff espera a los cuatro, a rabbit-admin y a kafka-admin.
+#  - El gateway publica 8080. Kafka UI publica 8090. El resto de Java
+#    queda en la red interna.
+#  - RabbitMQ (EP2) sigue: rabbit1 y rabbit2. La web en 15672 y 15673.
+#    El AMQP no sale de la red Docker. rabbit-topology declara las
+#    seis colas y se apaga.
+#  - Kafka (EP3) no corre en esta máquina. Cada broker y su Zookeeper
+#    van en una EC2 propia: docker-compose.kafka-node.yml.
+#    Esta máquina solo habla con ellos por la IP privada.
+#    Hace falta, en el .env que se sube:
+#      KAFKA_NODE_IP_1, KAFKA_NODE_IP_2, KAFKA_NODE_IP_3
+#      KAFKA_BOOTSTRAP_SERVERS=IP1:9092,IP2:9092,IP3:9092
+#    Los tres nodos tienen que estar arriba antes de este compose.
 #  - La instancia lleva swap (ec2-setup.sh) como margen de memoria.
 #
 #  En una t3.small (2 GB), definir en .env:
@@ -50,14 +57,17 @@ services:
       context: ./producto-service
       additional_contexts:
         rabbit-topology: ./rabbit-topology
+        kafka-topology: ./kafka-topology
     image: milsabores/producto-service:latest
     environment:
       <<: *jvm
       RABBITMQ_ADDRESSES: rabbit1:5672,rabbit2:5672
       RABBITMQ_USER: ${RABBITMQ_USER:-admin}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?falta KAFKA_BOOTSTRAP_SERVERS con las tres IP privadas}
     depends_on:
       rabbit-topology: { condition: service_completed_successfully }
+      kafka-topology: { condition: service_completed_successfully }
 
   carrito-service:
     <<: *spring-service
@@ -70,14 +80,17 @@ services:
       context: ./ventas-service
       additional_contexts:
         rabbit-topology: ./rabbit-topology
+        kafka-topology: ./kafka-topology
     image: milsabores/ventas-service:latest
     environment:
       <<: *jvm
       RABBITMQ_ADDRESSES: rabbit1:5672,rabbit2:5672
       RABBITMQ_USER: ${RABBITMQ_USER:-admin}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?falta KAFKA_BOOTSTRAP_SERVERS con las tres IP privadas}
     depends_on:
       rabbit-topology: { condition: service_completed_successfully }
+      kafka-topology: { condition: service_completed_successfully }
 
   # EP1: el gateway enruta /api/** y /bff/** al bff, que orquesta los servicios
   bff:
@@ -91,12 +104,14 @@ services:
       CARRITO_SERVICE_URL: http://carrito-service:8083
       VENTAS_SERVICE_URL: http://ventas-service:8084
       RABBIT_ADMIN_SERVICE_URL: http://rabbit-admin:8086
+      KAFKA_ADMIN_SERVICE_URL: http://kafka-admin:8087
     depends_on:
       usuario-service: { condition: service_healthy }
       producto-service: { condition: service_healthy }
       carrito-service: { condition: service_healthy }
       ventas-service: { condition: service_healthy }
       rabbit-admin: { condition: service_healthy }
+      kafka-admin: { condition: service_healthy }
 
   # EP2: API para administrar colas, exchanges y bindings. Sin puerto
   # publicado: solo se entra por gateway -> bff, que exige el rol ADMIN.
@@ -111,6 +126,16 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-admin123}
     depends_on:
       rabbit2: { condition: service_healthy }
+
+  # EP3: crea, cambia y borra topics. Sin puerto publicado: entra por
+  # gateway -> bff, que exige el rol ADMIN. No guarda los avisos.
+  kafka-admin:
+    <<: *spring-service
+    build: ./kafka-admin
+    image: milsabores/kafka-admin:latest
+    environment:
+      <<: *jvm
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?falta KAFKA_BOOTSTRAP_SERVERS con las tres IP privadas}
 
   api-gateway:
     <<: *spring-service
@@ -191,6 +216,32 @@ services:
     networks: [milsabores]
     depends_on:
       rabbit2: { condition: service_healthy }
+
+  # Pantalla del clúster. Lee los brokers por su IP privada.
+  # El puerto 8080 de adentro se publica en 8090 porque 8080 es el gateway.
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports: ["8090:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: milsabores
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?falta KAFKA_BOOTSTRAP_SERVERS con las tres IP privadas}
+      KAFKA_CLUSTERS_0_ZOOKEEPER: ${KAFKA_NODE_IP_1:?falta KAFKA_NODE_IP_1}:2181
+      DYNAMIC_CONFIG_ENABLED: "false"
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+    networks: [milsabores]
+
+  # Crea milsabores.stock y milsabores.ventas, y termina.
+  # Reintenta si los tres brokers todavía no aceptan conexiones.
+  kafka-topology:
+    build: ./kafka-topology
+    image: milsabores/kafka-topology:latest
+    restart: on-failure
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:?falta KAFKA_BOOTSTRAP_SERVERS con las tres IP privadas}
+      JAVA_OPTS: "-Xms64m -Xmx128m -XX:+ExitOnOutOfMemoryError"
+    networks: [milsabores]
 
 networks:
   milsabores:
