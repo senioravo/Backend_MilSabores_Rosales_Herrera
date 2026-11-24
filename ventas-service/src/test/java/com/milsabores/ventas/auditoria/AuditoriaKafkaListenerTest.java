@@ -44,7 +44,8 @@ class AuditoriaKafkaListenerTest {
 
         listener.recibirStock(aviso, registro);
 
-        verify(auditoriaKafkaService).registrarStockDescontado(aviso);
+        verify(auditoriaKafkaService).registrarStockDescontado(
+                aviso, KafkaTopologyNames.STOCK_TOPIC, 2, 7L);
     }
 
     @Test
@@ -64,7 +65,8 @@ class AuditoriaKafkaListenerTest {
 
         listener.recibirVenta(aviso, registro);
 
-        verify(auditoriaKafkaService).registrarVenta(aviso);
+        verify(auditoriaKafkaService).registrarVenta(
+                aviso, KafkaTopologyNames.VENTAS_TOPIC, 1, 3L);
     }
 
     @Test

@@ -85,7 +85,9 @@ public class DownstreamApiProxy {
         if (path.startsWith("/api/usuarios")) {
             return usuarioBase;
         }
-        if (path.startsWith("/api/productos") || path.startsWith("/api/categorias")) {
+        if (path.startsWith("/api/notificaciones")
+                || path.startsWith("/api/productos")
+                || path.startsWith("/api/categorias")) {
             return productoBase;
         }
         if (path.startsWith("/api/carritos")) {

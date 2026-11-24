@@ -44,7 +44,8 @@ class NotificacionKafkaListenerTest {
 
         listener.recibirStock(aviso, registro);
 
-        verify(notificacionKafkaService).avisarStockDescontado(aviso);
+        verify(notificacionKafkaService).avisarStockDescontado(
+                aviso, KafkaTopologyNames.STOCK_TOPIC, 1, 4L);
     }
 
     @Test
@@ -56,7 +57,8 @@ class NotificacionKafkaListenerTest {
 
         listener.recibirVenta(aviso, registro);
 
-        verify(notificacionKafkaService).avisarVentaRegistrada(aviso);
+        verify(notificacionKafkaService).avisarVentaRegistrada(
+                aviso, KafkaTopologyNames.VENTAS_TOPIC, 0, 2L);
     }
 
     @Test

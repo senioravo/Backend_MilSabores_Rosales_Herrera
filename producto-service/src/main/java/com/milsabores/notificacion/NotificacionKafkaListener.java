@@ -33,7 +33,8 @@ public class NotificacionKafkaListener {
         AvisoKafkaValidador.validarStock(aviso);
         log.info("Grupo notificacion leyó {} partición {} offset {} venta {}",
                 registro.topic(), registro.partition(), registro.offset(), aviso.ventaId());
-        notificacionKafkaService.avisarStockDescontado(aviso);
+        notificacionKafkaService.avisarStockDescontado(
+                aviso, registro.topic(), registro.partition(), registro.offset());
     }
 
     @KafkaHandler
@@ -41,7 +42,8 @@ public class NotificacionKafkaListener {
         AvisoKafkaValidador.validarVenta(aviso);
         log.info("Grupo notificacion leyó {} partición {} offset {} venta {}",
                 registro.topic(), registro.partition(), registro.offset(), aviso.ventaId());
-        notificacionKafkaService.avisarVentaRegistrada(aviso);
+        notificacionKafkaService.avisarVentaRegistrada(
+                aviso, registro.topic(), registro.partition(), registro.offset());
     }
 
     @KafkaHandler(isDefault = true)

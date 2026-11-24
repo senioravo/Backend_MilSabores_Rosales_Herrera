@@ -32,7 +32,8 @@ public class AuditoriaKafkaListener {
         AvisoKafkaValidador.validarStock(aviso);
         log.info("Grupo auditoria leyó {} partición {} offset {} venta {}",
                 registro.topic(), registro.partition(), registro.offset(), aviso.ventaId());
-        auditoriaKafkaService.registrarStockDescontado(aviso);
+        auditoriaKafkaService.registrarStockDescontado(
+                aviso, registro.topic(), registro.partition(), registro.offset());
     }
 
     @KafkaHandler
@@ -40,7 +41,8 @@ public class AuditoriaKafkaListener {
         AvisoKafkaValidador.validarVenta(aviso);
         log.info("Grupo auditoria leyó {} partición {} offset {} venta {}",
                 registro.topic(), registro.partition(), registro.offset(), aviso.ventaId());
-        auditoriaKafkaService.registrarVenta(aviso);
+        auditoriaKafkaService.registrarVenta(
+                aviso, registro.topic(), registro.partition(), registro.offset());
     }
 
     @KafkaHandler(isDefault = true)
