@@ -72,7 +72,9 @@ try {
     # ---------- Compilar y exportar ----------
     if (-not $SkipBuild) {
         # De a una: 6 builds de Gradle en paralelo pueden colgar el Docker local
-        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service", "bff", "api-gateway", "rabbit-topology", "rabbit-admin", "kafka-topology", "kafka-admin") {
+        # "ventas-service-1", no "ventas-service": ese nombre ahora es el nginx que
+        # balancea las dos réplicas y no tiene build propio ("No services to build").
+        foreach ($Service in "usuario-service", "producto-service", "carrito-service", "ventas-service-1", "bff", "api-gateway", "rabbit-topology", "rabbit-admin", "kafka-topology", "kafka-admin") {
             Invoke-Step "Compilando $Service (varios minutos la primera vez)" {
                 docker compose -f $ComposeFile build $Service
             }
@@ -93,6 +95,16 @@ try {
         ssh @SshOpts $Target "mkdir -p ~/$RemoteDir/infra/rabbitmq"
         if ($LASTEXITCODE -ne 0) { throw "No se pudo crear ~/milsabores/infra/rabbitmq en la EC2." }
         scp @SshOpts "infra/rabbitmq/rabbitmq.conf" "${Target}:~/$RemoteDir/infra/rabbitmq/rabbitmq.conf"
+    }
+    Invoke-Step "Subiendo infra/nginx/ventas-lb.conf" {
+        # Sin este archivo, el contenedor nginx de ventas-service no arranca: intenta
+        # montar el path como bind mount, Docker lo crea como carpeta vacía porque no
+        # existe, y después el mount falla ("not a directory"). Si una carpeta así
+        # quedó de un despliegue anterior fallido, hay que borrarla a mano en la EC2
+        # (pertenece a root, la creó el daemon de Docker) antes de volver a intentar.
+        ssh @SshOpts $Target "mkdir -p ~/$RemoteDir/infra/nginx"
+        if ($LASTEXITCODE -ne 0) { throw "No se pudo crear ~/milsabores/infra/nginx en la EC2." }
+        scp @SshOpts "infra/nginx/ventas-lb.conf" "${Target}:~/$RemoteDir/infra/nginx/ventas-lb.conf"
     }
     # Por si el .sh salió de Windows con fin de línea CRLF
     Invoke-Step "Ajustando fin de línea de ec2-up.sh" {

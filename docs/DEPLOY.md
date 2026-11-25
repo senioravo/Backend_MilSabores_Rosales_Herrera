@@ -330,9 +330,16 @@ ssh ... 'cd ~/milsabores && sudo docker compose -f docker-compose.ec2.yml exec k
 
 Debería devolver los dos tópicos con 3 particiones y 3 réplicas cada uno.
 
-#### Réplicas de ventas-service + balanceador (en desarrollo local)
+#### Réplicas de ventas-service + balanceador
 
-Por separado, hay un prototipo (todavía sin commitear) que reemplaza `ventas-service` por dos réplicas detrás de un nginx que hace failover entre ellas, pensado para que la caída de un contenedor no deje el checkout sin servicio. No está desplegado en esta EC2 todavía.
+`ventas-service` corre como dos réplicas (`ventas-service-1`, `ventas-service-2`) detrás de un nginx que balancea y hace failover entre ellas; el nombre `ventas-service` lo tiene el propio nginx, así que ni bff ni api-gateway necesitan ningún cambio. Si una réplica se cae, el checkout sigue funcionando por la otra, sin perder ninguna petición (probado matando una réplica en producción).
+
+nginx se recarga solo cada 15 segundos para no quedarse con IPs viejas cuando las réplicas se redespliegan (si no, hay que acordarse de `docker compose restart ventas-service` después de cada redeploy de `ventas-service-1`/`ventas-service-2`).
+
+`deploy-ec2.ps1` sube `infra/nginx/ventas-lb.conf` igual que sube `infra/rabbitmq/rabbitmq.conf`. Si ese archivo falta en la EC2, el contenedor de nginx no arranca (Docker intenta montarlo como bind mount, no lo encuentra, y crea una carpeta vacía en su lugar en vez de fallar con un error claro). Si eso pasa, hay que borrar esa carpeta a mano antes de volver a desplegar:
+```bash
+ssh ... 'sudo rmdir ~/milsabores/infra/nginx/ventas-lb.conf && sudo chown -R ubuntu:ubuntu ~/milsabores/infra/nginx'
+```
 
 ### Operación y problemas frecuentes
 

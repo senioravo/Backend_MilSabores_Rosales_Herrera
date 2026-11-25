@@ -488,10 +488,8 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 - [x] Clúster Kafka de tres brokers, cada uno en su propia EC2 (replicación real entre máquinas)
 - [x] Productores/consumidores Kafka en producto y ventas, con dos consumer groups independientes (notificación y auditoría)
 - [x] `kafka-admin` (CRUD de tópicos, listar consumer groups) y Kafka-UI, protegidos igual que `rabbit-admin`
-- [x] Diagrama de la topología de despliegue actual (`arquitectura-c4/topologia-aws-actual.svg`)
-
-### En progreso (sin desplegar todavía)
-- [ ] Alta disponibilidad de `ventas-service`: dos réplicas detrás de un balanceador nginx con failover automático. Probado localmente, pendiente de commit y de desplegar en la EC2.
+- [x] Diagrama de la topología de despliegue actual (`docs/diagramas/topologia-aws-actual.svg`)
+- [x] Alta disponibilidad de `ventas-service`: dos réplicas detrás de un balanceador nginx con failover automático, desplegado y probado en la EC2 (matando una réplica real, sin perder ninguna petición)
 
 ### Pendiente
 - [ ] Separar RabbitMQ de la EC2 de la app (hoy Kafka ya está en sus propias EC2, RabbitMQ todavía no)
