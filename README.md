@@ -167,6 +167,38 @@ A diferencia de RabbitMQ, el clúster de Kafka **no corre en la misma máquina q
 
 `min.insync.replicas=2`: una escritura se confirma solo si quedó en dos réplicas (dos de las tres EC2), no en una sola.
 
+### Estructura de los eventos
+
+Los dos eventos son `record` de Java en `kafka-topology` (`com.milsabores.kafka`), serializados a JSON por `JsonSerializer`/`JsonDeserializer` de Spring Kafka. El `record` valida sus propios campos al construirse (constructor compacto): un evento con un campo obligatorio vacío ni siquiera se llega a publicar.
+
+**`StockDescontado`** (en `milsabores.stock`) — el aviso mínimo de que el stock ya se movió:
+
+| Campo | Tipo | Por qué está |
+|-------|------|--------------|
+| `ventaId` | `Long` | Para que notificación y auditoría puedan relacionar el aviso con la venta que lo originó |
+| `items` | `List<Item>` | Qué productos y cuántos se descontaron |
+| `Item.productoCode` | `String` | Identifica el producto (sin pedirle el producto completo a producto-service) |
+| `Item.cantidad` | `int` | Cuánto se descontó de ese producto |
+
+No lleva precios ni datos de pago: a quien escucha este tópico le basta con saber *qué* se movió, no *cuánto costó* ni *quién pagó*.
+
+**`VentaRegistrada`** (en `milsabores.ventas`) — el aviso de que la venta quedó guardada:
+
+| Campo | Tipo | Por qué está |
+|-------|------|--------------|
+| `ventaId` | `Long` | Identifica la venta |
+| `usuarioId` | `Long` | Quién compró (por id, sin llamar a usuario-service) |
+| `usuarioNombre`, `usuarioEmail` | `String` | Lo que notificación necesita para avisarle al cliente, sin tener que resolver el id contra otro servicio |
+| `estado` | `String` | En qué quedó la venta (`COMPLETADA`, etc.) |
+| `total` | `Integer` | El monto final de la venta |
+| `fechaCreacion` | `LocalDateTime` | Cuándo se creó, para ordenar o filtrar en auditoría |
+| `items` | `List<Item>` | Qué se compró |
+| `Item.productoCode`, `Item.productoNombre`, `Item.cantidad` | `String`, `String`, `int` | A diferencia de `StockDescontado`, aquí sí viaja el nombre del producto: quien audita o notifica no debería tener que ir a buscarlo a producto-service solo para armar un mensaje legible |
+
+No lleva el token ni ningún dato de Transbank: el pago ya se resolvió antes de publicar este evento, este aviso es solo el resultado.
+
+Ambos eventos los valida `AvisoKafkaValidador` antes de que el listener los procese (campos nulos o listas vacías se rechazan ahí, no en la base de datos).
+
 ### Quién consume
 
 Ambos tópicos los leen **dos** consumer groups independientes, cada uno con su propio offset:
