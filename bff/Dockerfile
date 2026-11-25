@@ -33,6 +33,6 @@ ENV PORT=8085 \
 EXPOSE 8085
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-  CMD wget -qO- "http://localhost:${PORT}/actuator/health" > /dev/null || exit 1
+  CMD wget -qO- "http://127.0.0.1:${PORT}/actuator/health" > /dev/null || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -Dserver.port=$PORT -jar app.jar"]
