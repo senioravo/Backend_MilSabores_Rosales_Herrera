@@ -163,6 +163,8 @@ Los tres nodos (`kafka-node-1/2/3`) no forman parte de `docker-compose.ec2.yml`:
 
 Ensayo real de caída de un broker (con capturas de Kafka-UI antes/durante/después): [`docs/PRUEBA-HA-KAFKA.md`](PRUEBA-HA-KAFKA.md).
 
+Preparación de offsets/lag/consumer groups para la presentación (incluye un caso real de manejo de errores): [`docs/PRUEBA-OFFSETS-LAG-KAFKA.md`](PRUEBA-OFFSETS-LAG-KAFKA.md).
+
 ### Revisar el clúster
 
 ```bash
