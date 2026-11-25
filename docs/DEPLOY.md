@@ -107,16 +107,27 @@ Notas sobre el plan free:
 
 ## 4. AWS EC2 (AWS Academy, `docker-compose.ec2.yml`)
 
-Se usa una **t3.medium** (4 GB de RAM, 2 vCPU con créditos). `docker-compose.ec2.yml` cambia cuatro cosas respecto al compose local:
+Desde la incorporación de Kafka (EP3) el despliegue usa **cuatro EC2**, no una sola:
+
+| EC2 | Tipo | Qué corre |
+|-----|------|-----------|
+| **app** (la de siempre) | t3.medium (4 GB RAM, 2 vCPU con créditos) | gateway, bff, los 4 microservicios, rabbit-admin, kafka-admin, kafka-ui, y el clúster RabbitMQ (`rabbit1`, `rabbit2`) |
+| **kafka-node-1/2/3** (nuevas) | t3.small (2 GB RAM) cada una | un Zookeeper y un broker Kafka por máquina — `docker-compose.kafka-node.yml` |
+
+Los tres nodos de Kafka van en EC2 propias y no en la de la app por la misma razón que ya separa RabbitMQ en dos nodos: si los tres brokers compartieran una sola máquina, el factor de replicación 3 no protegería contra nada — al apagarse esa máquina se caería el clúster completo. Con una EC2 por broker, perder una no tumba el clúster (quórum de Zookeeper y `min.insync.replicas=2` lo toleran). El diagrama completo está en [`docs/diagramas/topologia-aws-actual.svg`](diagramas/topologia-aws-actual.svg).
+
+`docker-compose.ec2.yml` cambia esto respecto al compose local:
 
 | Cambio | Motivo |
 |--------|--------|
-| Sin bff | El frontend no lo usa; quedan 5 JVMs en vez de 6 |
-| `JAVA_OPTS` con heap de 256 MB y metaspace de 192 MB | Cada servicio queda en ~450 MB, ~2,3 GB en total; el resto queda para el sistema y Docker |
-| Los 4 servicios de datos arrancan en paralelo; el gateway espera a que estén *healthy* | El arranque completo tarda ~3–5 min |
-| Solo el gateway publica su puerto (8080) | Los servicios quedan en la red interna de Docker; todo pasa por el gateway, que valida el JWT |
+| `JAVA_OPTS` con heap de 256 MB y metaspace de 192 MB (128/192 MB con una sola réplica de `ventas-service`, ver más abajo) | Cada JVM queda acotada; el resto de la RAM queda para el sistema y Docker |
+| Los servicios de datos arrancan en paralelo; el gateway espera a que estén *healthy* | El arranque completo tarda ~3–5 min |
+| Solo el gateway (8080) y Kafka-UI (8090) publican puerto | El resto queda en la red interna de Docker; todo pasa por el gateway o por el BFF, que validan el JWT |
+| `KAFKA_BOOTSTRAP_SERVERS` apunta a las tres IP privadas de los nodos Kafka, no a esta máquina | Kafka no corre acá; ver la sección de abajo |
 
 Las imágenes **se compilan en el PC** y se copian a la instancia. Así la EC2 no gasta créditos de CPU ni memoria en Gradle.
+
+> **Disco:** el volumen que entrega AWS Academy por defecto a veces queda en **~6.7 GB usables**, aunque se haya pedido más en el wizard de lanzamiento — ya pasó con las cuatro instancias de este proyecto. Con Docker instalado y ~10 imágenes eso no alcanza. Verificar con `df -h /` después de lanzar la instancia y, si hace falta, seguir el procedimiento de la sección "Kafka en EC2 propias" más abajo (modificar el volumen EBS + `growpart` + `resize2fs`, sin perder nada ni reiniciar la instancia).
 
 **Si solo hay t3.small (2 GB):** también funciona, con memoria más ajustada. Agregar al `.env` antes de desplegar:
 
@@ -134,21 +145,23 @@ Navegador → Vercel (/api/* proxy) → http://<IP-elástica>:8080 (api-gateway 
 ### Fase 1: infraestructura (Learner Lab)
 
 1. **Start Lab**, esperar el indicador verde y abrir **AWS**. Región `us-east-1`.
-2. Lanzar una instancia EC2:
+2. Lanzar una instancia EC2 (la de la app; los tres nodos de Kafka se lanzan después, ver la sección propia más abajo):
    - AMI: **Ubuntu Server 24.04 LTS** (recomendada). Amazon Linux 2023 también sirve, pero el usuario SSH es `ec2-user`: usar `-User ec2-user` en el script.
    - Tipo: **t3.medium**.
-   - Key pair: **vockey**. Descargar `labsuser.pem` desde **AWS Details**.
-   - Disco: 20 GB gp3.
+   - Key pair: **vockey**. Descargar `labsuser.pem` desde **AWS Details** (este proyecto usa un key pair propio, `MilSabores.pem`; ver `docs/OPERACION-EC2.md`).
+   - Disco: pedir 20 GB gp3 en el wizard, pero **verificar con `df -h /` al conectarse por primera vez** — AWS Academy a veces entrega igual un volumen de ~6.7 GB usables. Si pasa, no hace falta relanzar la instancia: alcanzar el tamaño pedido con **EC2 → Volumes → Modify volume** y después, por SSH, `sudo growpart /dev/nvme0n1 1 && sudo resize2fs /dev/nvme0n1p1` (el nombre del dispositivo puede variar; confirmar con `lsblk`).
 3. Security Group `milsabores-sg`:
 
    | Puerto | Origen | Motivo |
    |--------|--------|--------|
    | 22 | Mi IP | SSH |
    | 8080 | 0.0.0.0/0 | api-gateway (lo llaman las funciones de Vercel) |
+   | 8090 | Mi IP | Kafka-UI. Es una consola de administración sin login: no abrirla a 0.0.0.0/0 |
    | 15672 | Mi IP | Management UI de rabbit1. No abrirla a 0.0.0.0/0 |
    | 15673 | Mi IP | Management UI de rabbit2. No abrirla a 0.0.0.0/0 |
+   | 9092, 2181, 2888, 3888 | el propio security group (self-reference) | Para que esta EC2 y los tres nodos de Kafka se hablen entre sí. Ver la sección "Kafka en EC2 propias" |
 
-   El AMQP (5672) no se publica en la instancia. producto y ventas llegan a `rabbit1:5672` y `rabbit2:5672` por la red de Docker.
+   El AMQP (5672) no se publica en la instancia. producto y ventas llegan a `rabbit1:5672` y `rabbit2:5672` por la red de Docker. Los tres nodos de Kafka usan el mismo security group (lanzarlos con **Launch more like this** desde esta instancia copia VPC, subred y security group automáticamente).
 
 4. Asignar una **IP elástica** y asociarla a la instancia. La instancia se detiene cuando termina la sesión del lab; sin IP elástica, la IP pública cambia en cada arranque y habría que actualizar Vercel.
 
@@ -247,6 +260,79 @@ Es el mismo clúster que en local: nodos `rabbit@rabbit1` y `rabbit@rabbit2`, im
 En Overview, el clúster muestra 2 nodos. En Queues, las seis colas. Si la web no carga, la regla del Security Group sigue en "My IP" de otra red: editar 15672 y 15673 igual que el puerto 22.
 
 No hace falta abrir el 5672. Un `.env` con `RABBITMQ_ADDRESSES=localhost:...` no afecta a los contenedores: el compose de la EC2 les pone `rabbit1:5672,rabbit2:5672`.
+
+### Kafka en EC2 propias (EP3)
+
+A diferencia de RabbitMQ, Kafka **no corre en la EC2 de la app**: cada broker (con su Zookeeper) vive en su propia instancia t3.small, usando `docker-compose.kafka-node.yml` y `network_mode: host` (así el broker se anuncia con la IP real de la máquina, sin NAT de Docker de por medio).
+
+#### Lanzar las tres instancias
+
+1. Seleccionar la EC2 de la app en el EC2 console → **Actions → Launch more like this**. Copia la AMI, la VPC/subred y el security group automáticamente, así las cuatro máquinas quedan en la misma red privada sin tener que configurar nada a mano.
+2. En el wizard: **Instance type → t3.small**, **Number of instances → 3**, con IP pública (hace falta para configurarlas por SSH; no hace falta IP elástica).
+3. Agregar al security group compartido las reglas de la tabla de la Fase 1 (9092/2181/2888/3888 con origen el propio security group, y 8090 restringido a Mi IP).
+4. Revisar el disco apenas conectar por SSH (`df -h /`) — ver la nota de la Fase 1. Con las cuatro instancias de este proyecto, las tres llegaron con 6.7 GB y hubo que ampliarlas a 12 GB (Modify volume + `growpart` + `resize2fs`) antes de poder instalar Docker y bajar las imágenes de Kafka/Zookeeper.
+5. En cada una, swap de 2 GB (en vez de los 4 GB que intenta `ec2-setup.sh` por defecto en instancias de 2 GB de RAM; con solo 12 GB de disco, 4 GB de swap deja muy poco margen para las imágenes):
+   ```bash
+   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+   sudo mkswap /swapfile && sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+   ```
+
+#### Configurar y levantar cada nodo
+
+En cada una de las tres instancias (`~/milsabores-kafka/`, o el nombre que se prefiera):
+
+```bash
+scp -i MilSabores.pem docker-compose.kafka-node.yml ubuntu@<IP-pública-del-nodo>:~/milsabores-kafka/
+```
+
+Y un `.env` propio por nodo, con las **mismas tres IP privadas** en los tres archivos y solo `KAFKA_NODE_ID`/`KAFKA_ADVERTISED_HOST` cambiando:
+
+```
+KAFKA_NODE_IP_1=<IP privada del nodo 1>
+KAFKA_NODE_IP_2=<IP privada del nodo 2>
+KAFKA_NODE_IP_3=<IP privada del nodo 3>
+KAFKA_NODE_ID=1          # 2 en el nodo 2, 3 en el nodo 3
+KAFKA_ADVERTISED_HOST=<IP privada DE ESTA máquina>
+```
+
+Después, en los tres (el orden no importa, pero **el primero que arranque se queda esperando a los otros dos**: Zookeeper necesita quórum, no arranca con un solo nodo):
+
+```bash
+cd ~/milsabores-kafka && sudo docker compose -f docker-compose.kafka-node.yml up -d
+```
+
+Verificar con `sudo docker ps`: `zookeeper` y `kafka` en *healthy* en los tres. Si alguno se queda mucho rato en *starting*, revisar que las tres IP privadas en su `.env` sean correctas y que el security group ya tenga las reglas de la Fase 1.
+
+#### Conectar la EC2 de la app al clúster
+
+En el `.env` de la EC2 de la app (el mismo que usa `deploy-ec2.ps1`, **no solo el remoto**: si se vuelve a desplegar, el script sube el `.env` local y pisa lo que haya en la EC2):
+
+```
+KAFKA_BOOTSTRAP_SERVERS=<IP1>:9092,<IP2>:9092,<IP3>:9092
+KAFKA_NODE_IP_1=<IP1>          # kafka-ui lo usa para hablarle a Zookeeper
+```
+
+Y volver a desplegar (`deploy-ec2.ps1 ... -Up`, o si las imágenes ya están compiladas, con `-SkipBuild`). `kafka-topology` crea los tópicos `milsabores.stock` y `milsabores.ventas` (3 particiones, 3 réplicas) y se apaga; `kafka-admin` y `kafka-ui` quedan arriba.
+
+#### Verificación
+
+```bash
+curl http://<IP-elástica-app>:8080/actuator/health        # gateway
+open http://<IP-elástica-app>:8090                         # Kafka-UI (Mi IP)
+```
+
+`kafka-admin` no publica puerto (solo se entra por el gateway → BFF con rol ADMIN), así que para probarlo directo hay que entrar al contenedor:
+
+```bash
+ssh ... 'cd ~/milsabores && sudo docker compose -f docker-compose.ec2.yml exec kafka-admin wget -qO- http://localhost:8087/api/kafka-admin/topics'
+```
+
+Debería devolver los dos tópicos con 3 particiones y 3 réplicas cada uno.
+
+#### Réplicas de ventas-service + balanceador (en desarrollo local)
+
+Por separado, hay un prototipo (todavía sin commitear) que reemplaza `ventas-service` por dos réplicas detrás de un nginx que hace failover entre ellas, pensado para que la caída de un contenedor no deje el checkout sin servicio. No está desplegado en esta EC2 todavía.
 
 ### Operación y problemas frecuentes
 

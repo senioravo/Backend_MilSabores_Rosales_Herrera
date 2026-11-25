@@ -4,16 +4,24 @@ Guía rápida para el día a día del despliegue en AWS Academy. La instalación
 
 **Datos del despliegue actual**
 
+Son **cuatro instancias EC2** (todas en el mismo Learner Lab, `us-east-1`, misma VPC/security group): la de la app (de siempre) y, desde EP3, tres más solo para Kafka. El diagrama completo: [`docs/diagramas/topologia-aws-actual.svg`](diagramas/topologia-aws-actual.svg).
+
 | Qué | Valor |
 |-----|-------|
-| Instancia | EC2 t3.medium, Ubuntu, en el Learner Lab (`us-east-1`) |
-| IP elástica | `184.195.13.200` |
+| Instancia app | EC2 t3.medium, Ubuntu |
+| IP elástica (app) | `184.195.13.200` |
 | Backend (api-gateway) | `http://184.195.13.200:8080` |
+| Kafka-UI | `http://184.195.13.200:8090` (Security Group: Mi IP) |
 | RabbitMQ rabbit1 | `http://184.195.13.200:15672` (usuario `admin`, clave la de `RABBITMQ_PASSWORD`) |
 | RabbitMQ rabbit2 | `http://184.195.13.200:15673` |
-| Llave SSH | `C:\Users\diego\Downloads\MilSabores.pem` (no `labsuser.pem`) |
+| Llave SSH (las cuatro instancias) | `C:\Users\diego\Downloads\MilSabores.pem` (no `labsuser.pem`) |
+| kafka-node-1 | EC2 t3.small · IP privada `172.31.8.219` · `KAFKA_NODE_ID=1` |
+| kafka-node-2 | EC2 t3.small · IP privada `172.31.9.130` · `KAFKA_NODE_ID=2` |
+| kafka-node-3 | EC2 t3.small · IP privada `172.31.4.202` · `KAFKA_NODE_ID=3` |
 | Frontend | `https://dsy-1104-rosales-herrera.vercel.app` |
 | Variable en Vercel | `BACKEND_URL = http://184.195.13.200:8080` |
+
+Los tres nodos de Kafka no tienen IP elástica (solo IP pública dinámica, que cambia si se detienen). No hace falta entrar a ellos por IP pública para el uso normal: la app les habla por IP privada, y esa no cambia. Solo hace falta su IP pública para SSH si hay que revisarlos o reconfigurarlos.
 
 Resumen:
 
@@ -34,14 +42,15 @@ Resumen:
 Cuando se acaba el tiempo de la sesión (o se presiona **End Lab**), AWS Academy **detiene** la instancia. No se borra nada: el disco, las imágenes Docker, el `.env` y la IP elástica se conservan.
 
 ### Pasos al volver
-1. En el Learner Lab, presionar **Start Lab** y esperar el indicador verde.
-2. Abrir **AWS → EC2 → Instances** y confirmar que la instancia está en **Running**. El Learner Lab vuelve a encender las instancias que estaban corriendo; si aparece **Stopped**, seleccionarla y hacer **Instance state → Start instance**.
+1. En el Learner Lab, presionar **Start Lab** y esperar el indicador verde. Esto enciende las **cuatro** instancias (la de la app y los tres nodos de Kafka), no solo una.
+2. Abrir **AWS → EC2 → Instances** y confirmar que las cuatro están en **Running**. El Learner Lab vuelve a encender las que estaban corriendo; si alguna aparece **Stopped**, seleccionarla y hacer **Instance state → Start instance**.
 3. Esperar **2–3 minutos**. No hay que conectarse por SSH ni ejecutar nada.
 4. Verificar:
    ```bash
    curl http://184.195.13.200:8080/actuator/health
    # {"status":"UP",...}
    ```
+   Si el gateway responde pero algo que depende de Kafka falla, es casi siempre que algún nodo de Kafka tardó más en levantar que la app — ver la sección 5.
 
 ### Por qué no hace falta hacer nada más
 - **Docker arranca con la instancia:** `ec2-setup.sh` lo dejó habilitado con `systemctl enable docker`.
@@ -86,7 +95,16 @@ Requisitos en el PC: el lab iniciado, Rancher Desktop corriendo y la carpeta del
    $env:DOCKER_CONTEXT = "default"
    .\scripts\ec2\deploy-ec2.ps1 -Ip 184.195.13.200 -Key C:\Users\diego\Downloads\MilSabores.pem -Up
    ```
-3. Esperar el mensaje `Listo`. El script compila las 5 imágenes de a una, las sube (~315 MB), reemplaza los contenedores y espera a que el gateway quede *healthy*. En total tarda unos 10–15 minutos, según la conexión.
+3. Esperar el mensaje `Listo`. El script compila las imágenes de a una (10 desde que está Kafka), las sube (~490 MB), reemplaza los contenedores y espera a que el gateway quede *healthy*. En total tarda unos 15–20 minutos, según la conexión.
+
+   **Si falla "no space left on device" al cargar las imágenes:** la EC2 se quedó sin disco (ver la nota de disco en `DEPLOY.md`, sección 4). Liberar espacio bajando el stack viejo y podando sus imágenes, y reintentar con `-SkipBuild` (ya están compiladas, no hace falta repetir el build):
+   ```bash
+   ssh -i C:\Users\diego\Downloads\MilSabores.pem ubuntu@184.195.13.200 \
+     'cd ~/milsabores && sudo docker compose -f docker-compose.ec2.yml down && sudo docker image prune -a -f'
+   ```
+   ```powershell
+   .\scripts\ec2\deploy-ec2.ps1 -Ip 184.195.13.200 -Key C:\Users\diego\Downloads\MilSabores.pem -SkipBuild -Up
+   ```
 
 El backend queda sin servicio 1–2 minutos, mientras se reemplazan los contenedores.
 
@@ -136,3 +154,46 @@ free -h                                                              # memoria y
 ```
 
 La web del clúster es `http://184.195.13.200:15672` y `:15673`. Si no abre, en el Security Group los puertos 15672 y 15673 tienen que permitir **My IP**, igual que el 22. El usuario es `admin`.
+
+---
+
+## 5. Kafka: operación de los tres nodos
+
+Los tres nodos (`kafka-node-1/2/3`) no forman parte de `docker-compose.ec2.yml`: viven en sus propias EC2, con `docker-compose.kafka-node.yml`. Se reinician solos con **Start Lab** (`restart: unless-stopped`), igual que la EC2 de la app.
+
+### Revisar el clúster
+
+```bash
+for ip in 3.235.234.97 98.92.232.102 100.61.132.187; do
+  echo "=== $ip ==="
+  ssh -i /c/Users/diego/Downloads/MilSabores.pem ubuntu@$ip "sudo docker ps --format 'table {{.Names}}\t{{.Status}}'"
+done
+```
+
+`zookeeper` y `kafka` tienen que estar *healthy* en los tres. Si uno se queda mucho rato en *starting*, revisar que los otros dos también estén arriba: Zookeeper no arranca solo, necesita quórum (al menos 2 de 3).
+
+### Un tópico no aparece o `kafka-admin` no responde
+
+```bash
+ssh -i /c/Users/diego/Downloads/MilSabores.pem ubuntu@184.195.13.200 \
+  'cd ~/milsabores && sudo docker compose -f docker-compose.ec2.yml exec kafka-admin wget -qO- http://localhost:8087/api/kafka-admin/topics'
+```
+
+Si da error de conexión, el problema está entre la EC2 de la app y los nodos (revisar `KAFKA_BOOTSTRAP_SERVERS` en el `.env` y las reglas 9092 del security group), no en `kafka-admin` mismo.
+
+### Reiniciar un nodo
+
+```bash
+ssh -i /c/Users/diego/Downloads/MilSabores.pem ubuntu@<IP-pública-del-nodo> \
+  'cd ~/milsabores-kafka && sudo docker compose -f docker-compose.kafka-node.yml restart'
+```
+
+Los otros dos siguen sirviendo mientras tanto (por eso están separados).
+
+### Cambiar el código de Kafka (kafka-admin, kafka-topology, o los publishers/listeners de producto/ventas)
+
+Los tres nodos **no se tocan**: ese código corre en la EC2 de la app. Alcanza con el despliegue normal (sección 3.1).
+
+### Las instancias de Kafka no aparecen al hacer `docker ps`, o la IP pública cambió
+
+Los tres nodos no tienen IP elástica. Si el Learner Lab las reinicia (no solo las detiene) o se relanzan, la IP pública cambia — buscarla de nuevo en **EC2 → Instances**. La IP **privada** (la que de verdad importa, la que está en `KAFKA_BOOTSTRAP_SERVERS`) no cambia mientras no se borre la instancia.

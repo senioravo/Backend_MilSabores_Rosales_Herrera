@@ -22,7 +22,7 @@ Backend de la pastelería Mil Sabores, construido con Spring Boot como microserv
                         │
                         ▼
               ┌───────────────────┐
-              │  API Gateway :8080│  JWT + rate limiting + CORS
+              │  API Gateway :8080│  JWT (propio + Azure Entra ID) + rate limiting + CORS
               └─────────┬─────────┘
         ┌──────────┬────┴─────┬───────────┬──────────┐
         ▼          ▼          ▼           ▼          ▼
@@ -32,14 +32,21 @@ Backend de la pastelería Mil Sabores, construido con Spring Boot como microserv
                         │                llama directo a los 4
                         ▼
               Neon PostgreSQL (compartida)
+
+   producto y ventas, además, publican y consumen en:
+   RabbitMQ (rabbit1/rabbit2, clúster de 2 nodos)   — comandos/eventos de stock, ACK manual + DLQ
+   Kafka (3 brokers, EC2 propias, 1 por broker)     — avisos de stock/venta, 2 consumer groups
 ```
 
 Cada microservicio sigue las capas Controller → Service → Repository → Entity/DTO y tiene su propio `GlobalExceptionHandler`. Los servicios se referencian solo por ID: no hay claves foráneas entre tablas de servicios distintos.
+
+La topología completa de despliegue (qué corre en cuál de las 4 EC2) está en [`docs/diagramas/topologia-aws-actual.svg`](docs/diagramas/topologia-aws-actual.svg).
 
 ### API Gateway (Puerto 8080)
 - Punto de entrada único (Spring Cloud Gateway)
 - Enruta `/api/usuarios`, `/api/productos`, `/api/categorias`, `/api/carritos`, `/api/ventas` y `/bff`
 - Valida el JWT emitido por usuario-service y reenvía `X-User-Id` y `X-User-Email` a los servicios
+- Valida también JWT de **Azure Entra ID** (IDaaS) cuando `AZURE_ENTRA_ENABLED=true`, con el mismo tenant/audiencia que usa el frontend
 - Rutas públicas (sin token): login, registro, productos, categorías y `/actuator`
 - Rate limiting por IP en memoria (60 peticiones/minuto por defecto)
 - CORS para `localhost:5173`, `localhost:3000` y el frontend en Vercel (`FRONTEND_URL`)
@@ -147,6 +154,66 @@ Cambiados para enganchar eso:
 - `scripts/ec2/deploy-ec2.ps1`, `scripts/ec2/ec2-up.sh`
 - `docs/DEPLOY.md`, `docs/OPERACION-EC2.md`
 
+## Mensajería con Kafka (EP3)
+
+RabbitMQ (arriba) mueve el comando que descuenta el stock; Kafka mueve el **aviso** de que algo ya pasó, para quien quiera enterarse sin depender de ese flujo transaccional. `producto-service` publica cuando el stock quedó descontado y `ventas-service` cuando la venta quedó registrada. Ambos microservicios, además, consumen **los dos** tópicos con su propio consumer group: así notificación (en producto) y auditoría (en ventas) se enteran de todo lo que pasa, sin llamarse entre sí por HTTP.
+
+A diferencia de RabbitMQ, el clúster de Kafka **no corre en la misma máquina que la app**: son tres EC2 separadas, una por broker + Zookeeper, para que el factor de replicación 3 proteja de verdad contra la caída de una máquina (y no solo de un proceso). El paso a paso de esa infraestructura está en [`docs/DEPLOY.md`, sección "Kafka en EC2 propias"](docs/DEPLOY.md#kafka-en-ec2-propias-ep3).
+
+| Tópico | Particiones | Réplicas | Retención | Lo publica |
+|--------|-------------|----------|-----------|------------|
+| `milsabores.stock` | 3 | 3 | 1 hora | `producto-service` (`StockKafkaPublisher`), cuando confirma el descuento de stock que vino por RabbitMQ |
+| `milsabores.ventas` | 3 | 3 | 7 días | `ventas-service` (`VentaKafkaPublisher`), cuando la venta queda `COMPLETADA` |
+
+`min.insync.replicas=2`: una escritura se confirma solo si quedó en dos réplicas (dos de las tres EC2), no en una sola.
+
+### Quién consume
+
+Ambos tópicos los leen **dos** consumer groups independientes, cada uno con su propio offset:
+
+| Consumer group | Dónde vive | Qué hace |
+|----------------|------------|----------|
+| `notificacion` | `producto-service` (`NotificacionKafkaListener`) | Guarda el aviso (`NotificacionKafka`) y lo expone por `GET /api/notificaciones` |
+| `auditoria` | `ventas-service` (`AuditoriaKafkaListener`) | Guarda el aviso (`AuditoriaKafka`) y lo expone por `GET /api/ventas/auditoria` |
+
+Un aviso con JSON corrupto no tumba al grupo (`ErrorHandlingDeserializer`); un fallo de base de datos se reintenta 3 veces y cualquier otro error se registra en el log y el grupo sigue con el siguiente mensaje — la partición nunca queda bloqueada por un aviso problemático.
+
+### Administrador (`kafka-admin`, puerto 8087)
+
+Mismo patrón que `rabbit-admin`: REST para crear, actualizar, eliminar y listar tópicos, y para listar consumer groups. Entra por el mismo camino que `rabbit-admin` (`/api/kafka-admin/**` → BFF → rol `ADMIN`).
+
+| Método | Ruta | Resultado |
+|--------|------|-----------|
+| GET | `/api/kafka-admin/topics` | Lista los tópicos con sus particiones, factor de replicación, cleanup policy y retención |
+| POST | `/api/kafka-admin/topics` | 201 |
+| PUT | `/api/kafka-admin/topics/{nombre}` | 204 |
+| DELETE | `/api/kafka-admin/topics/{nombre}` | 204 |
+| GET | `/api/kafka-admin/grupos` | Lista los consumer groups |
+
+### Kafka-UI (puerto 8090)
+
+Consola de solo lectura para ver brokers, tópicos, particiones y mensajes. No crea ni borra nada — para eso está `kafka-admin`. En la EC2 queda restringida a **Mi IP** en el security group: no tiene login propio.
+
+### Archivos que entraron con esta etapa
+
+Nuevos:
+
+- `kafka-topology/` (`KafkaTopologyConfig`, `KafkaTopologyNames`, `KafkaConsumerErrors`, `StockDescontado`, `VentaRegistrada`, `AvisoKafkaValidador`, `Dockerfile`)
+- `kafka-admin/` (controlador `/api/kafka-admin`, `KafkaAdminService`, `KafkaAdminClientCluster`, pruebas)
+- `producto-service`: `StockKafkaPublisher`, `notificacion/` (`NotificacionKafkaListener`, `NotificacionKafkaService`, `NotificacionKafkaController`, modelo y repositorio)
+- `ventas-service`: `VentaKafkaPublisher`, `auditoria/` (`AuditoriaKafkaListener`, `AuditoriaKafkaService`, `AuditoriaKafkaController`, modelo y repositorio)
+- `docker-compose.kafka-node.yml` (el nodo de Kafka para una EC2 propia)
+
+Cambiados para enganchar eso:
+
+- `producto-service/.../StockCommandConsumer.java` también publica en Kafka después de confirmar el descuento
+- `ventas-service/.../VentaServiceImpl.java` también publica en Kafka cuando la venta queda `COMPLETADA`
+- `bff`: `KAFKA_ADMIN_SERVICE_URL`, ruta `kafka-admin-api`
+- `api-gateway/.../application.yml` ruta `kafka-admin-api`
+- `docker-compose.yml`, `docker-compose.ec2.yml`, `.env.example`
+- `scripts/ec2/deploy-ec2.ps1`
+- `docs/DEPLOY.md`, `docs/OPERACION-EC2.md`
+
 ## 🗄️ Base de Datos
 
 **PostgreSQL en Neon**
@@ -195,7 +262,7 @@ El frontend es el otro repositorio. Dentro de este backend, cada pieza que se en
 
 ```
 Backend_MilSabores_Rosales_Herrera/
-├── api-gateway/            # Spring Cloud Gateway (JWT, rate limiting, CORS)
+├── api-gateway/            # Spring Cloud Gateway (JWT propio + Azure Entra, rate limiting, CORS)
 ├── bff/                    # Backend For Frontend (checkout)
 ├── usuario-service/
 │   ├── src/main/java/com/milsabores/usuario/
@@ -209,12 +276,16 @@ Backend_MilSabores_Rosales_Herrera/
 │   │   └── util/            # JwtUtil
 │   ├── src/main/resources/application.properties
 │   └── Dockerfile
-├── producto-service/       # [misma estructura]
+├── producto-service/       # [misma estructura] + consumidor/productor Kafka, notificaciones
 ├── carrito-service/        # [misma estructura]
-├── ventas-service/         # [misma estructura] + publicación del comando de stock
+├── ventas-service/         # [misma estructura] + comando de stock (Rabbit) y aviso de venta (Kafka)
 ├── rabbit-topology/        # Exchanges, colas, bindings, comando y evento
 ├── rabbit-admin/           # REST para crear y borrar colas, exchanges y bindings
+├── kafka-topology/         # Tópicos, particiones/réplicas, manejo de errores del consumidor
+├── kafka-admin/            # REST para crear, actualizar y borrar tópicos; listar consumer groups
 ├── infra/rabbitmq/         # rabbitmq.conf: los dos nodos se descubren al partir
+├── docker-compose.kafka-node.yml   # Un nodo de Kafka (Zookeeper + broker), para una EC2 propia
+├── arquitectura-c4/        # Diagramas C4 y la topología actual de despliegue en AWS
 ├── k8s/                    # Manifiestos de Kubernetes (kustomize)
 ├── database/schema.sql     # Script de creación de BD
 ├── docs/                   # Documentación (arquitectura, endpoints, despliegue)
@@ -366,7 +437,7 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 - **Docker Compose**: `docker-compose.yml` levanta los microservicios y el clúster RabbitMQ (`rabbit1`, `rabbit2`) en local.
 - **Kubernetes**: `kubectl apply -k k8s/` (namespace, ConfigMap, Deployments, Services, Ingress).
 - **Render**: Blueprint `render.yaml` (6 Web Services Docker).
-- **AWS EC2**: `docker-compose.ec2.yml` levanta el mismo clúster (`rabbit1`, `rabbit2`). La web queda en los puertos 15672 y 15673. Paso a paso en `docs/DEPLOY.md`.
+- **AWS EC2**: `docker-compose.ec2.yml` levanta la app y el clúster RabbitMQ (`rabbit1`, `rabbit2`) en una EC2, y `docker-compose.kafka-node.yml` levanta un broker Kafka + Zookeeper en cada una de otras tres EC2. Son **4 instancias en total**. Paso a paso en `docs/DEPLOY.md`.
 
 ## 🔧 Tecnologías Utilizadas
 
@@ -377,6 +448,7 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 - **Spring Data JPA** + **PostgreSQL** (Neon)
 - **Resilience4j 2.2.0** (circuit breaker y retry)
 - **Spring AMQP** y **RabbitMQ 4.2** (clúster de dos nodos, ACK manual, DLQ)
+- **Spring for Apache Kafka** y **Kafka 3.8 / Confluent 7.6** (clúster de tres brokers, cada uno en su EC2, 2 consumer groups)
 - **Spring Boot Actuator**
 - **SpringDoc OpenAPI 2.7.0** (Swagger)
 - **Lombok**
@@ -392,7 +464,7 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 5. **Rate limiting**: se guarda en memoria, así que el gateway debe correr con **una sola réplica**.
 6. **Transbank**: se usan las credenciales públicas del ambiente de integración. La URL de retorno apunta al frontend en Vercel.
 
-## ✅ Avance del Proyecto (al 23-09-2026)
+## ✅ Avance del Proyecto (al 25-11-2026)
 
 ### Completado
 - [x] Microservicios usuario, producto, carrito y ventas
@@ -400,6 +472,7 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 - [x] Seguridad con Spring Security y JWT
 - [x] Contraseñas hasheadas con BCrypt
 - [x] API Gateway con validación JWT (Spring Cloud Gateway)
+- [x] Validación JWT de **Azure Entra ID** (IDaaS) en el gateway y doble validación en el BFF
 - [x] Rate limiting en el gateway
 - [x] BFF para el flujo de checkout
 - [x] Circuit Breaker y Retry (Resilience4j en el BFF)
@@ -408,13 +481,21 @@ La guía completa está en [`docs/DEPLOY.md`](docs/DEPLOY.md):
 - [x] Dockerizar los microservicios
 - [x] Manifiestos de Kubernetes
 - [x] Blueprint de despliegue en Render
-- [x] Clúster RabbitMQ local (rabbit1 y rabbit2) y el mismo clúster en `docker-compose.ec2.yml`
+- [x] Clúster RabbitMQ (rabbit1 y rabbit2), local y en `docker-compose.ec2.yml`
 - [x] Comando de stock por exchange direct y evento por exchange topic
 - [x] ACK manual, reintentos acotados y tres DLQ
 - [x] `rabbit-admin` protegido por el gateway y el rol ADMIN en el BFF
+- [x] Clúster Kafka de tres brokers, cada uno en su propia EC2 (replicación real entre máquinas)
+- [x] Productores/consumidores Kafka en producto y ventas, con dos consumer groups independientes (notificación y auditoría)
+- [x] `kafka-admin` (CRUD de tópicos, listar consumer groups) y Kafka-UI, protegidos igual que `rabbit-admin`
+- [x] Diagrama de la topología de despliegue actual (`arquitectura-c4/topologia-aws-actual.svg`)
+
+### En progreso (sin desplegar todavía)
+- [ ] Alta disponibilidad de `ventas-service`: dos réplicas detrás de un balanceador nginx con failover automático. Probado localmente, pendiente de commit y de desplegar en la EC2.
 
 ### Pendiente
-- [ ] Integrar validación JWT de Azure IDaaS
+- [ ] Separar RabbitMQ de la EC2 de la app (hoy Kafka ya está en sus propias EC2, RabbitMQ todavía no)
+- [ ] Quitarle el punto único de falla al api-gateway y al BFF (hoy son instancia única; el rate limiting en memoria del gateway lo impide sin mover ese estado a Redis)
 - [ ] Configurar Azure API Manager (hoy la validación JWT la hace Spring Cloud Gateway)
 - [ ] Agregar Redis para caché y para un rate limiting distribuido
 - [ ] Métricas con Prometheus (Actuator ya está incorporado)

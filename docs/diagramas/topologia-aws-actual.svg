@@ -1,0 +1,136 @@
+<svg width="1320" height="880" viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Segoe UI, Arial, sans-serif">
+  <title>Topología de despliegue en AWS Academy — Mil Sabores</title>
+  <desc>Cuatro instancias EC2: una EC2 de aplicación (t3.medium) con el API Gateway, el BFF, los cuatro microservicios, los administradores de RabbitMQ y Kafka, Kafka-UI y el clúster RabbitMQ de dos nodos; y tres EC2 separadas (t3.small), cada una con un Zookeeper y un broker Kafka, formando un clúster de tres nodos con replicación real entre máquinas distintas. El frontend en Vercel llama al API Gateway, y los cuatro microservicios comparten una base PostgreSQL en Neon.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1L9 5L1 9Z" fill="#555"/>
+    </marker>
+    <marker id="arrowg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1L9 5L1 9Z" fill="#0a5c3e"/>
+    </marker>
+  </defs>
+
+  <style>
+    text { font-size: 14px; fill: #1a1a1a; }
+    .small { font-size: 12px; fill: #444; }
+    .tiny { font-size: 11px; fill: #666; }
+    .label-ec2 { font-size: 15px; font-weight: 600; fill: #0c447c; }
+    .label-kafka { font-size: 15px; font-weight: 600; fill: #0a5c3e; }
+    .svc { fill: #ffffff; stroke: #888; stroke-width: 1; rx: 6; }
+    .svc-pub { fill: #eaf2fb; stroke: #0c447c; stroke-width: 1.5; rx: 6; }
+    .svc-rabbit { fill: #fff3e0; stroke: #a66a00; stroke-width: 1; rx: 6; }
+    .svc-kafka { fill: #e3f5ec; stroke: #0a5c3e; stroke-width: 1; rx: 6; }
+    .box-ec2 { fill: #f3f8fe; stroke: #0c447c; stroke-width: 1.5; rx: 14; }
+    .box-kafkanode { fill: #eefaf3; stroke: #0a5c3e; stroke-width: 1.5; rx: 14; }
+    .box-ext { fill: #f6f6f4; stroke: #888; stroke-width: 1; stroke-dasharray: 5 4; rx: 10; }
+    .arr { stroke: #555; stroke-width: 1.3; fill: none; marker-end: url(#arrow); }
+    .arr-dashed { stroke: #0a5c3e; stroke-width: 1.3; fill: none; stroke-dasharray: 4 3; marker-end: url(#arrowg); }
+  </style>
+
+  <!-- Frontend externo -->
+  <rect class="box-ext" x="520" y="16" width="280" height="56"/>
+  <text x="660" y="40" text-anchor="middle" font-weight="600">Frontend (Vercel)</text>
+  <text x="660" y="58" text-anchor="middle" class="small">React 18 + Vite</text>
+  <line class="arr" x1="660" y1="72" x2="660" y2="104"/>
+
+  <!-- ===================== EC2 app ===================== -->
+  <rect class="box-ec2" x="40" y="104" width="1000" height="470"/>
+  <text x="62" y="130" class="label-ec2">EC2 app — t3.medium — IP elástica</text>
+  <text x="62" y="148" class="small">RabbitMQ, los 4 microservicios, gateway, BFF y los administradores</text>
+
+  <!-- Gateway + Kafka UI -->
+  <rect class="svc-pub" x="70" y="166" width="220" height="56"/>
+  <text x="180" y="190" text-anchor="middle" font-weight="600">api-gateway :8080</text>
+  <text x="180" y="208" text-anchor="middle" class="small">público · JWT + CORS</text>
+
+  <rect class="svc-kafka" x="760" y="166" width="220" height="56"/>
+  <text x="870" y="190" text-anchor="middle" font-weight="600">kafka-ui :8090</text>
+  <text x="870" y="208" text-anchor="middle" class="small">público, restringido a Mi IP</text>
+
+  <line class="arr" x1="290" y1="194" x2="420" y2="258"/>
+
+  <!-- BFF -->
+  <rect class="svc-pub" x="420" y="246" width="200" height="50"/>
+  <text x="520" y="268" text-anchor="middle" font-weight="600">bff :8085</text>
+  <text x="520" y="286" text-anchor="middle" class="small">checkout, orquesta</text>
+
+  <!-- 4 microservicios -->
+  <rect class="svc" x="70" y="330" width="200" height="56"/>
+  <text x="170" y="354" text-anchor="middle" font-weight="600">usuario-service</text>
+  <text x="170" y="372" text-anchor="middle" class="small">:8081</text>
+
+  <rect class="svc" x="290" y="330" width="200" height="56"/>
+  <text x="390" y="354" text-anchor="middle" font-weight="600">producto-service</text>
+  <text x="390" y="372" text-anchor="middle" class="small">:8082 · con Kafka</text>
+
+  <rect class="svc" x="510" y="330" width="200" height="56"/>
+  <text x="610" y="354" text-anchor="middle" font-weight="600">carrito-service</text>
+  <text x="610" y="372" text-anchor="middle" class="small">:8083</text>
+
+  <rect class="svc" x="730" y="330" width="200" height="56"/>
+  <text x="830" y="354" text-anchor="middle" font-weight="600">ventas-service</text>
+  <text x="830" y="372" text-anchor="middle" class="small">:8084 · con Kafka</text>
+
+  <line class="arr" x1="520" y1="296" x2="520" y2="328"/>
+
+  <!-- Administradores -->
+  <rect class="svc-rabbit" x="200" y="416" width="220" height="50"/>
+  <text x="310" y="438" text-anchor="middle" font-weight="600">rabbit-admin :8086</text>
+  <text x="310" y="456" text-anchor="middle" class="small">CRUD colas/exchanges</text>
+
+  <rect class="svc-kafka" x="580" y="416" width="220" height="50"/>
+  <text x="690" y="438" text-anchor="middle" font-weight="600">kafka-admin :8087</text>
+  <text x="690" y="456" text-anchor="middle" class="small">CRUD tópicos/grupos</text>
+
+  <!-- RabbitMQ cluster -->
+  <rect class="svc-rabbit" x="200" y="492" width="200" height="56"/>
+  <text x="300" y="516" text-anchor="middle" font-weight="600">rabbit1</text>
+  <text x="300" y="534" text-anchor="middle" class="small">RabbitMQ, nodo 1</text>
+
+  <rect class="svc-rabbit" x="420" y="492" width="200" height="56"/>
+  <text x="520" y="516" text-anchor="middle" font-weight="600">rabbit2</text>
+  <text x="520" y="534" text-anchor="middle" class="small">RabbitMQ, nodo 2</text>
+
+  <line class="arr" x1="400" y1="520" x2="420" y2="520"/>
+  <text x="410" y="510" text-anchor="middle" class="tiny">clúster</text>
+
+  <!-- Neon externo -->
+  <rect class="box-ext" x="1080" y="280" width="200" height="90"/>
+  <text x="1180" y="310" text-anchor="middle" font-weight="600">Neon PostgreSQL</text>
+  <text x="1180" y="328" text-anchor="middle" class="small">compartida</text>
+  <text x="1180" y="346" text-anchor="middle" class="small">(fuera de AWS)</text>
+  <line class="arr" x1="930" y1="358" x2="1078" y2="325"/>
+
+  <!-- ===================== Kafka nodes ===================== -->
+  <text x="40" y="618" class="label-kafka">Kafka: tres EC2 separadas (t3.small), una por broker</text>
+
+  <rect class="box-kafkanode" x="40" y="636" width="300" height="150"/>
+  <text x="190" y="662" text-anchor="middle" font-weight="600">EC2 kafka-node-1</text>
+  <rect class="svc-kafka" x="60" y="674" width="260" height="40"/>
+  <text x="190" y="699" text-anchor="middle" class="small">zookeeper (id 1) + broker (id 1)</text>
+  <text x="190" y="762" text-anchor="middle" class="tiny">IP privada: 172.31.8.219</text>
+
+  <rect class="box-kafkanode" x="370" y="636" width="300" height="150"/>
+  <text x="520" y="662" text-anchor="middle" font-weight="600">EC2 kafka-node-2</text>
+  <rect class="svc-kafka" x="390" y="674" width="260" height="40"/>
+  <text x="520" y="699" text-anchor="middle" class="small">zookeeper (id 2) + broker (id 2)</text>
+  <text x="520" y="762" text-anchor="middle" class="tiny">IP privada: 172.31.9.130</text>
+
+  <rect class="box-kafkanode" x="700" y="636" width="300" height="150"/>
+  <text x="850" y="662" text-anchor="middle" font-weight="600">EC2 kafka-node-3</text>
+  <rect class="svc-kafka" x="720" y="674" width="260" height="40"/>
+  <text x="850" y="699" text-anchor="middle" class="small">zookeeper (id 3) + broker (id 3)</text>
+  <text x="850" y="762" text-anchor="middle" class="tiny">IP privada: 172.31.4.202</text>
+
+  <line class="arr-dashed" x1="340" y1="710" x2="370" y2="710"/>
+  <line class="arr-dashed" x1="670" y1="710" x2="700" y2="710"/>
+
+  <!-- Conexiones de producto/ventas/kafka-admin hacia el clúster Kafka, en quiebre para no cruzar texto -->
+  <path class="arr-dashed" d="M390,386 L390,628 L190,628 L190,634" fill="none"/>
+  <path class="arr-dashed" d="M830,386 L830,628 L850,628 L850,634" fill="none"/>
+  <path class="arr-dashed" d="M690,466 L690,628 L520,628 L520,634" fill="none"/>
+
+  <text x="1050" y="600" text-anchor="middle" class="tiny" fill="#0a5c3e">puerto 9092</text>
+  <text x="1050" y="614" text-anchor="middle" class="tiny" fill="#0a5c3e">(entre estas 4 EC2 solamente)</text>
+</svg>
