@@ -161,6 +161,8 @@ La web del clúster es `http://184.195.13.200:15672` y `:15673`. Si no abre, en 
 
 Los tres nodos (`kafka-node-1/2/3`) no forman parte de `docker-compose.ec2.yml`: viven en sus propias EC2, con `docker-compose.kafka-node.yml`. Se reinician solos con **Start Lab** (`restart: unless-stopped`), igual que la EC2 de la app.
 
+Ensayo real de caída de un broker (con capturas de Kafka-UI antes/durante/después): [`docs/PRUEBA-HA-KAFKA.md`](PRUEBA-HA-KAFKA.md).
+
 ### Revisar el clúster
 
 ```bash
