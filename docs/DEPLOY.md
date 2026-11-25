@@ -268,7 +268,7 @@ A diferencia de RabbitMQ, Kafka **no corre en la EC2 de la app**: cada broker (c
 #### Lanzar las tres instancias
 
 1. Seleccionar la EC2 de la app en el EC2 console → **Actions → Launch more like this**. Copia la AMI, la VPC/subred y el security group automáticamente, así las cuatro máquinas quedan en la misma red privada sin tener que configurar nada a mano.
-2. En el wizard: **Instance type → t3.small**, **Number of instances → 3**, con IP pública (hace falta para configurarlas por SSH; no hace falta IP elástica).
+2. En el wizard: **Instance type → t3.small**, **Number of instances → 3**, con IP pública (hace falta para configurarlas por SSH). No es obligatorio asignarles IP elástica (la app les habla por IP privada, que no cambia), pero en este proyecto se les asignó una igual para no tener que buscar la IP pública nueva en la consola cada vez que hay que entrar por SSH — ver la tabla de IPs en [OPERACION-EC2.md](OPERACION-EC2.md).
 3. Agregar al security group compartido las reglas de la tabla de la Fase 1 (9092/2181/2888/3888 con origen el propio security group, y 8090 restringido a Mi IP).
 4. Revisar el disco apenas conectar por SSH (`df -h /`) — ver la nota de la Fase 1. Con las cuatro instancias de este proyecto, las tres llegaron con 6.7 GB y hubo que ampliarlas a 12 GB (Modify volume + `growpart` + `resize2fs`) antes de poder instalar Docker y bajar las imágenes de Kafka/Zookeeper.
 5. En cada una, swap de 2 GB (en vez de los 4 GB que intenta `ec2-setup.sh` por defecto en instancias de 2 GB de RAM; con solo 12 GB de disco, 4 GB de swap deja muy poco margen para las imágenes):

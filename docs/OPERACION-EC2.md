@@ -15,13 +15,13 @@ Son **cuatro instancias EC2** (todas en el mismo Learner Lab, `us-east-1`, misma
 | RabbitMQ rabbit1 | `http://184.195.13.200:15672` (usuario `admin`, clave la de `RABBITMQ_PASSWORD`) |
 | RabbitMQ rabbit2 | `http://184.195.13.200:15673` |
 | Llave SSH (las cuatro instancias) | `C:\Users\diego\Downloads\MilSabores.pem` (no `labsuser.pem`) |
-| kafka-node-1 | EC2 t3.small · IP privada `172.31.8.219` · `KAFKA_NODE_ID=1` |
-| kafka-node-2 | EC2 t3.small · IP privada `172.31.9.130` · `KAFKA_NODE_ID=2` |
-| kafka-node-3 | EC2 t3.small · IP privada `172.31.4.202` · `KAFKA_NODE_ID=3` |
+| kafka-node-1 | EC2 t3.small · IP elástica `18.204.181.19` · IP privada `172.31.8.219` · `KAFKA_NODE_ID=1` |
+| kafka-node-2 | EC2 t3.small · IP elástica `54.88.100.145` · IP privada `172.31.9.130` · `KAFKA_NODE_ID=2` |
+| kafka-node-3 | EC2 t3.small · IP elástica `3.226.29.156` · IP privada `172.31.4.202` · `KAFKA_NODE_ID=3` |
 | Frontend | `https://dsy-1104-rosales-herrera.vercel.app` |
 | Variable en Vercel | `BACKEND_URL = http://184.195.13.200:8080` |
 
-Los tres nodos de Kafka no tienen IP elástica (solo IP pública dinámica, que cambia si se detienen). No hace falta entrar a ellos por IP pública para el uso normal: la app les habla por IP privada, y esa no cambia. Solo hace falta su IP pública para SSH si hay que revisarlos o reconfigurarlos.
+Las cuatro instancias (app + los tres nodos de Kafka) ya tienen IP elástica fija: no cambian aunque se detenga y vuelva a arrancar el lab. No hace falta entrar a los nodos de Kafka por IP pública para el uso normal: la app les habla por IP privada. La IP pública solo se usa para SSH si hay que revisarlos o reconfigurarlos.
 
 Resumen:
 
@@ -164,7 +164,7 @@ Los tres nodos (`kafka-node-1/2/3`) no forman parte de `docker-compose.ec2.yml`:
 ### Revisar el clúster
 
 ```bash
-for ip in 3.235.234.97 98.92.232.102 100.61.132.187; do
+for ip in 18.204.181.19 54.88.100.145 3.226.29.156; do
   echo "=== $ip ==="
   ssh -i /c/Users/diego/Downloads/MilSabores.pem ubuntu@$ip "sudo docker ps --format 'table {{.Names}}\t{{.Status}}'"
 done
@@ -194,6 +194,6 @@ Los otros dos siguen sirviendo mientras tanto (por eso están separados).
 
 Los tres nodos **no se tocan**: ese código corre en la EC2 de la app. Alcanza con el despliegue normal (sección 3.1).
 
-### Las instancias de Kafka no aparecen al hacer `docker ps`, o la IP pública cambió
+### Las instancias de Kafka no aparecen al hacer `docker ps`
 
-Los tres nodos no tienen IP elástica. Si el Learner Lab las reinicia (no solo las detiene) o se relanzan, la IP pública cambia — buscarla de nuevo en **EC2 → Instances**. La IP **privada** (la que de verdad importa, la que está en `KAFKA_BOOTSTRAP_SERVERS`) no cambia mientras no se borre la instancia.
+Los tres nodos ya tienen IP elástica fija (ver tabla arriba), así que la IP pública no debería cambiar. Si aun así no responde por SSH, confirmar en **EC2 → Instances** que la IP elástica sigue asociada a la instancia correcta (se puede desasociar si alguien relanza la instancia desde cero). La IP **privada** (la que de verdad importa, la que está en `KAFKA_BOOTSTRAP_SERVERS`) no cambia mientras no se borre la instancia.
